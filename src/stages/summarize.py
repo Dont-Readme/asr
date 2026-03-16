@@ -43,9 +43,10 @@ def _render_prompt(context: JobContext, transcript: TranscriptResult) -> str:
         encoding="utf-8"
     )
     transcript_text = "\n".join(segment.line for segment in transcript.segments)
-    return prompt_template.format(
-        meeting_title=context.meeting_title,
-        transcript=transcript_text,
+    return (
+        prompt_template
+        .replace("{meeting_title}", context.meeting_title)
+        .replace("{transcript}", transcript_text)
     )
 
 
