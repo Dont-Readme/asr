@@ -54,6 +54,7 @@ nohup env CUDA_VISIBLE_DEVICES=1 python run_pipeline.py ./input/test1.m4a --meet
 - Python 3.10+
 - ffmpeg 설치
 - production 모드에서는 GPU용 torch/torchaudio, qwen-asr, pyannote.audio
+- `pyannote/speaker-diarization-community-1`를 쓸 경우 `pyannote.audio 4.x` 필요
 
 ## 5. 폴더 구조
 - `input/`: 입력 오디오
@@ -95,6 +96,7 @@ pytest -q
 - vLLM 호출 실패: `SUMMARY_BASE_URL`와 `SUMMARY_ENDPOINT_PATH` 확인
 - Qwen 모델 로드 실패: `torch` CUDA wheel, `ASR_DEVICE`, `ALIGN_DEVICE` 확인
 - pyannote 로드 실패: `HUGGINGFACE_HUB_TOKEN`과 모델 약관 동의 확인
+- `SpeakerDiarization.__init__(... plda ...)` 오류: `pyannote.audio`를 4.x로 업그레이드
 - production stage 실패: `ASR_COMMAND`, `ALIGN_COMMAND`, `DIARIZATION_COMMAND` 설정 확인
 
 ## 9. 다음 확장 포인트

@@ -73,12 +73,24 @@ def build_pipeline_load_kwargs(from_pretrained, token: str | None) -> dict:
     return {}
 
 
+def validate_pyannote_runtime(pyannote_version: str, model_name: str) -> None:
+    major = int(str(pyannote_version).split(".", 1)[0])
+    uses_community_1 = "speaker-diarization-community-1" in model_name
+    if uses_community_1 and major < 4:
+        raise RuntimeError(
+            "pyannote/speaker-diarization-community-1 requires pyannote.audio 4.x. "
+            f"Current version: {pyannote_version}. Upgrade pyannote.audio or switch to "
+            "pyannote/speaker-diarization-3.1 for legacy 3.x runtime."
+        )
+
+
 def main() -> int:
     args = parse_args()
     project_root = project_root_from(Path(__file__))
     env = load_runtime_env(project_root)
 
     try:
+        import pyannote.audio
         import torch
         from pyannote.audio import Pipeline
     except ImportError as error:
@@ -86,6 +98,7 @@ def main() -> int:
         return 1
 
     model_name = args.model or env.get("DIARIZATION_MODEL", "pyannote/speaker-diarization-community-1")
+    validate_pyannote_runtime(pyannote.audio.__version__, model_name)
     token = env.get("HUGGINGFACE_HUB_TOKEN", "").strip() or None
     pipeline = Pipeline.from_pretrained(
         model_name,
