@@ -97,6 +97,7 @@ pytest -q
 - Qwen 모델 로드 실패: `torch` CUDA wheel, `ASR_DEVICE`, `ALIGN_DEVICE` 확인
 - pyannote 로드 실패: `HUGGINGFACE_HUB_TOKEN`과 모델 약관 동의 확인
 - `SpeakerDiarization.__init__(... plda ...)` 오류: `pyannote.audio`를 4.x로 업그레이드
+- `huggingface-hub==1.x` 충돌: `uv pip install "huggingface-hub>=0.34,<1.0" "transformers==4.57.6"`
 - production stage 실패: `ASR_COMMAND`, `ALIGN_COMMAND`, `DIARIZATION_COMMAND` 설정 확인
 
 ## 9. 다음 확장 포인트
