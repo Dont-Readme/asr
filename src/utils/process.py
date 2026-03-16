@@ -29,5 +29,18 @@ def run_templated_command(
         check=False,
     )
     if completed.returncode != 0:
-        stderr = completed.stderr.strip().splitlines()[-1] if completed.stderr.strip() else "external command failed"
-        raise StageError(stage_name, stderr)
+        stderr_lines = completed.stderr.strip().splitlines() if completed.stderr.strip() else []
+        stdout_lines = completed.stdout.strip().splitlines() if completed.stdout.strip() else []
+        logger.error("%s stage external command failed with code %s", stage_name, completed.returncode)
+        if stdout_lines:
+            logger.error("%s stage stdout tail:\n%s", stage_name, "\n".join(stdout_lines[-20:]))
+        if stderr_lines:
+            logger.error("%s stage stderr tail:\n%s", stage_name, "\n".join(stderr_lines[-20:]))
+
+        if stderr_lines:
+            message = "\n".join(stderr_lines[-20:])
+        elif stdout_lines:
+            message = "\n".join(stdout_lines[-20:])
+        else:
+            message = "external command failed"
+        raise StageError(stage_name, message)
