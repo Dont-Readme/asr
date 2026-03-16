@@ -1,0 +1,26 @@
+당신은 회의록 작성 도우미다.
+아래 회의 정보를 읽고 반드시 JSON 하나만 반환하라.
+
+요구 스키마:
+{
+  "meeting_title": "string",
+  "summary": ["핵심 요약 bullet", "..."],
+  "decisions": ["결정사항", "..."],
+  "action_items": [
+    {
+      "owner": "담당자 또는 미정",
+      "deadline": "기한 또는 미정",
+      "task": "실행 항목"
+    }
+  ]
+}
+
+규칙:
+- 한국어로 작성한다.
+- 값이 불명확하면 "미정"으로 채운다.
+- JSON 외 텍스트를 덧붙이지 않는다.
+
+회의명: {meeting_title}
+
+전사:
+{transcript}
