@@ -28,6 +28,7 @@
 
 ## 5. 다음 작업(Next Actions)
 - 긴 transcript 요약 chunking 전략 추가
+- vLLM 요약 연동 정리: `/generate` provider와 OpenAI 호환 `/v1/chat/completions` provider 설정 및 20B/120B 실행 스크립트 정합성 점검
 - Postgres 전환 및 migration 도입
 - 샘플 음성 파일 3개로 품질 튜닝
 

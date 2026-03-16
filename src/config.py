@@ -76,6 +76,7 @@ class AppConfig:
     summary_top_p: float
     summary_max_tokens: int
     summary_response_key: str
+    summary_model: str
     audio_target_sr: int
     audio_target_channels: int
     merge_ambiguous_sec: float
@@ -137,6 +138,7 @@ def load_config(project_root: Path, env_path: Path | None = None) -> AppConfig:
         summary_top_p=float(_get_setting(raw_values, "SUMMARY_TOP_P", "0.9")),
         summary_max_tokens=int(_get_setting(raw_values, "SUMMARY_MAX_TOKENS", "1000")),
         summary_response_key=_get_setting(raw_values, "SUMMARY_RESPONSE_KEY", "generated_text"),
+        summary_model=_get_setting(raw_values, "SUMMARY_MODEL", ""),
         audio_target_sr=int(_get_setting(raw_values, "AUDIO_TARGET_SR", "16000")),
         audio_target_channels=int(_get_setting(raw_values, "AUDIO_TARGET_CHANNELS", "1")),
         merge_ambiguous_sec=float(_get_setting(raw_values, "MERGE_AMBIGUOUS_SEC", "0.08")),

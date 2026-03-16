@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from src.clients.vllm_client import VLLMGenerateClient, extract_json_object
+from src.clients.vllm_client import VLLMGenerateClient, VLLMOpenAIChatClient, extract_json_object
 from src.pipeline.job_context import JobContext
 from src.schemas.summary import ActionItem, MeetingSummary
 from src.schemas.transcript import TranscriptResult
@@ -21,6 +21,13 @@ def run(context: JobContext) -> MeetingSummary:
         raw_text = client.generate(prompt)
         payload = extract_json_object(raw_text)
         payload["provider"] = "vllm_generate"
+        summary = MeetingSummary.from_dict(payload)
+    elif context.config.summary_provider == "vllm_openai_chat":
+        prompt = _render_prompt(context, transcript)
+        client = VLLMOpenAIChatClient(context.config)
+        raw_text = client.generate(prompt)
+        payload = extract_json_object(raw_text)
+        payload["provider"] = "vllm_openai_chat"
         summary = MeetingSummary.from_dict(payload)
     else:
         raise StageError("SUMMARIZE", f"지원하지 않는 SUMMARY_PROVIDER: {context.config.summary_provider}")

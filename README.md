@@ -77,6 +77,7 @@ nohup env CUDA_VISIBLE_DEVICES=1 python run_pipeline.py ./input/test1.m4a --meet
 - `DIARIZATION_DEVICE`, `DIARIZATION_NUM_SPEAKERS`
 - `SUMMARY_PROVIDER=vllm_generate|mock`
 - `SUMMARY_BASE_URL`, `SUMMARY_ENDPOINT_PATH`
+- OpenAI 호환 vLLM이면 `SUMMARY_PROVIDER=vllm_openai_chat`, `SUMMARY_MODEL`, `SUMMARY_API_KEY`
 
 ## 7. 테스트
 현재 테스트는 `unittest` 호환으로 작성되어 추가 패키지 없이 실행할 수 있다.
@@ -95,6 +96,7 @@ pytest -q
 - ffmpeg 실패: `ffmpeg -version` 확인
 - SQLite 생성 실패: `DB_URL` 경로와 쓰기 권한 확인
 - vLLM 호출 실패: `SUMMARY_BASE_URL`와 `SUMMARY_ENDPOINT_PATH` 확인
+- `vLLM HTTP 400`에 `Field required: messages`가 나오면 OpenAI 호환 vLLM endpoint에 `vllm_generate` payload를 보낸 상태다. `SUMMARY_PROVIDER=vllm_openai_chat`로 바꾸고 `SUMMARY_MODEL`을 함께 설정한다.
 - Qwen 모델 로드 실패: `torch` CUDA wheel, `ASR_DEVICE`, `ALIGN_DEVICE` 확인
 - pyannote 로드 실패: `HUGGINGFACE_HUB_TOKEN`과 모델 약관 동의 확인
 - `SpeakerDiarization.__init__(... plda ...)` 오류: `pyannote.audio`를 4.x로 업그레이드

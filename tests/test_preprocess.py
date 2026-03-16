@@ -62,6 +62,7 @@ class BuildFfmpegCommandTest(unittest.TestCase):
                 summary_base_url="http://127.0.0.1:8000",
                 summary_endpoint_path="/generate",
                 summary_api_key="",
+                summary_model="",
                 summary_temperature=0.3,
                 summary_top_p=0.9,
                 summary_max_tokens=1000,
