@@ -10,7 +10,7 @@ from src.adapters.qwen_asr import build_asr_payload
 class AdapterPayloadTest(unittest.TestCase):
     def test_build_asr_payload_filters_empty_segments(self) -> None:
         payload = build_asr_payload(
-            model_name="Qwen3-ASR-1.7B",
+            model_name="Qwen/Qwen3-ASR-1.7B",
             chunk_results=[
                 {"text": "안녕하세요", "language": "Korean", "start_sec": 0.0, "end_sec": 10.0},
                 {"text": " ", "language": "Korean", "start_sec": 10.0, "end_sec": 20.0},
@@ -22,7 +22,7 @@ class AdapterPayloadTest(unittest.TestCase):
 
     def test_build_align_payload_wraps_segments(self) -> None:
         payload = build_align_payload(
-            model_name="Qwen3-ForcedAligner-0.6B",
+            model_name="Qwen/Qwen3-ForcedAligner-0.6B",
             aligned_segments=[{"text": "회의 시작", "start_sec": 0.0, "end_sec": 1.0, "words": []}],
         )
         self.assertEqual(payload["provider"], "qwen_forced_aligner")

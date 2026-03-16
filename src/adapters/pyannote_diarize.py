@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 from pathlib import Path
 import sys
 
@@ -60,6 +61,18 @@ def build_rttm_lines(turns: list[dict], uri: str = "meeting") -> str:
     return "\n".join(lines) + ("\n" if lines else "")
 
 
+def build_pipeline_load_kwargs(from_pretrained, token: str | None) -> dict:
+    if not token:
+        return {}
+
+    parameters = inspect.signature(from_pretrained).parameters
+    if "token" in parameters:
+        return {"token": token}
+    if "use_auth_token" in parameters:
+        return {"use_auth_token": token}
+    return {}
+
+
 def main() -> int:
     args = parse_args()
     project_root = project_root_from(Path(__file__))
@@ -74,7 +87,10 @@ def main() -> int:
 
     model_name = args.model or env.get("DIARIZATION_MODEL", "pyannote/speaker-diarization-community-1")
     token = env.get("HUGGINGFACE_HUB_TOKEN", "").strip() or None
-    pipeline = Pipeline.from_pretrained(model_name, token=token)
+    pipeline = Pipeline.from_pretrained(
+        model_name,
+        **build_pipeline_load_kwargs(Pipeline.from_pretrained, token),
+    )
 
     diarization_device = env.get("DIARIZATION_DEVICE", env.get("DEVICE", "")).strip()
     if diarization_device:

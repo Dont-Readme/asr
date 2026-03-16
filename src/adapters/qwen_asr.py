@@ -66,7 +66,7 @@ def main() -> int:
         print(f"Qwen ASR dependencies are missing: {error}", file=sys.stderr)
         return 1
 
-    model_name = args.model or env.get("ASR_MODEL", "Qwen3-ASR-1.7B")
+    model_name = args.model or env.get("ASR_MODEL", "Qwen/Qwen3-ASR-1.7B")
     forced_language = normalize_language_name(args.language or env.get("ASR_FORCE_LANGUAGE"))
     context = (args.context or env.get("ASR_CONTEXT", "")).strip()
     chunk_max_seconds = float(env.get("ASR_CHUNK_MAX_SECONDS", env.get("ALIGN_CHUNK_MAX_SECONDS", "180")))

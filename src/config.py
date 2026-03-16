@@ -116,8 +116,8 @@ def load_config(project_root: Path, env_path: Path | None = None) -> AppConfig:
         log_root=_resolve_path(project_root, _get_setting(raw_values, "LOG_ROOT", "./logs")),
         input_root=_resolve_path(project_root, _get_setting(raw_values, "INPUT_ROOT", "./input")),
         device=_get_setting(raw_values, "DEVICE", "cuda"),
-        asr_model=_get_setting(raw_values, "ASR_MODEL", "Qwen3-ASR-1.7B"),
-        align_model=_get_setting(raw_values, "ALIGN_MODEL", "Qwen3-ForcedAligner-0.6B"),
+        asr_model=_get_setting(raw_values, "ASR_MODEL", "Qwen/Qwen3-ASR-1.7B"),
+        align_model=_get_setting(raw_values, "ALIGN_MODEL", "Qwen/Qwen3-ForcedAligner-0.6B"),
         diarization_model=_get_setting(
             raw_values,
             "DIARIZATION_MODEL",

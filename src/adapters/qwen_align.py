@@ -47,7 +47,7 @@ def main() -> int:
         print(f"Qwen align dependencies are missing: {error}", file=sys.stderr)
         return 1
 
-    model_name = args.model or env.get("ALIGN_MODEL", "Qwen3-ForcedAligner-0.6B")
+    model_name = args.model or env.get("ALIGN_MODEL", "Qwen/Qwen3-ForcedAligner-0.6B")
     forced_language = normalize_language_name(args.language or env.get("ALIGN_LANGUAGE"))
     max_batch_size = int(env.get("ALIGN_MAX_BATCH_SIZE", "8"))
 
