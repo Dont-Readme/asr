@@ -23,7 +23,7 @@ GPU 서버에서는 torch를 먼저 설치한 뒤 adapter 의존성을 추가한
 
 ```bash
 # 예시: CUDA 12.4
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install "torch==2.6.0" "torchaudio==2.6.0" --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.server.txt
 
 cp .env.example .env
@@ -55,6 +55,7 @@ nohup env CUDA_VISIBLE_DEVICES=1 python run_pipeline.py ./input/test1.m4a --meet
 - ffmpeg 설치
 - production 모드에서는 GPU용 torch/torchaudio, qwen-asr, pyannote.audio
 - `pyannote/speaker-diarization-community-1`를 쓸 경우 `pyannote.audio 4.x` 필요
+- CUDA 12.4 + 공식 wheel 제약이 있으면 `pyannote/speaker-diarization-3.1` + `pyannote.audio 3.3.2`가 더 안정적일 수 있음
 
 ## 5. 폴더 구조
 - `input/`: 입력 오디오
@@ -98,6 +99,8 @@ pytest -q
 - pyannote 로드 실패: `HUGGINGFACE_HUB_TOKEN`과 모델 약관 동의 확인
 - `SpeakerDiarization.__init__(... plda ...)` 오류: `pyannote.audio`를 4.x로 업그레이드
 - `huggingface-hub==1.x` 충돌: `uv pip install "huggingface-hub>=0.34,<1.0" "transformers==4.57.6"`
+- `torchaudio.list_audio_backends` 오류: `torch`와 `torchaudio`를 같은 버전의 2.9 미만으로 다시 맞춰 설치. `cu124` 예시는 `2.6.0`
+- `NameError: AudioDecoder`: `pyannote.audio 4.x`가 기대하는 `torchcodec` 디코더 스택이 깨진 상태. 가장 쉬운 우회는 `pyannote/speaker-diarization-3.1` + `pyannote.audio 3.3.2`
 - production stage 실패: `ASR_COMMAND`, `ALIGN_COMMAND`, `DIARIZATION_COMMAND` 설정 확인
 
 ## 9. 다음 확장 포인트

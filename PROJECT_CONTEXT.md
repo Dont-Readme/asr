@@ -20,6 +20,7 @@
 7. `requirements.txt`는 control-plane 중심으로 유지하고, 모델 런타임은 `requirements.server.txt`와 서버별 torch 설치로 분리한다.
 8. 테스트는 현재 환경 제약을 반영해 `unittest` 호환으로 작성한다.
 9. ASR adapter는 align 단계 호환성을 위해 기본 chunk 길이를 180초로 제한한다.
+10. CUDA 12.4 서버에서 `community-1 + pyannote.audio 4.x`가 런타임 의존성(torchcodec/torchaudio)로 불안정하면 `speaker-diarization-3.1 + pyannote.audio 3.3.2`를 fallback으로 사용한다.
 
 ## 4. 현재 상태 요약
 - 설계 문서 기반 부트스트랩 구현 진행 중

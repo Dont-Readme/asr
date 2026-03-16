@@ -73,6 +73,21 @@ def build_pipeline_load_kwargs(from_pretrained, token: str | None) -> dict:
     return {}
 
 
+def load_audio_for_pyannote(audio_path: Path):
+    import torchaudio
+
+    waveform, sample_rate = torchaudio.load(str(audio_path))
+    if waveform.ndim == 1:
+        waveform = waveform.unsqueeze(0)
+    if waveform.shape[0] > 1:
+        waveform = waveform.mean(dim=0, keepdim=True)
+    return {
+        "waveform": waveform,
+        "sample_rate": int(sample_rate),
+        "uri": audio_path.stem,
+    }
+
+
 def validate_pyannote_runtime(pyannote_version: str, model_name: str) -> None:
     major = int(str(pyannote_version).split(".", 1)[0])
     uses_community_1 = "speaker-diarization-community-1" in model_name
@@ -123,7 +138,8 @@ def main() -> int:
         if max_speakers is not None:
             inference_kwargs["max_speakers"] = max_speakers
 
-    diarization_output = pipeline(str(Path(args.audio).resolve()), **inference_kwargs)
+    diarization_input = load_audio_for_pyannote(Path(args.audio).resolve())
+    diarization_output = pipeline(diarization_input, **inference_kwargs)
     annotation = (
         getattr(diarization_output, "exclusive_speaker_diarization", None)
         or getattr(diarization_output, "speaker_diarization", None)
