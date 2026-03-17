@@ -131,3 +131,30 @@ class SqliteJobRepository:
                 """,
                 (job_id, file_type, str(path), sha256, utcnow_iso()),
             )
+
+    def get_job(self, job_id: str) -> dict | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, status, current_stage, input_path, meeting_title, language,
+                       work_dir, output_dir, log_path, error_stage, error_message,
+                       created_at, updated_at
+                FROM meeting_job
+                WHERE id = ?
+                """,
+                (job_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_artifacts(self, job_id: str) -> list[dict]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT file_type, path, sha256, created_at
+                FROM exported_file
+                WHERE job_id = ?
+                ORDER BY id ASC
+                """,
+                (job_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]

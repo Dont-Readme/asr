@@ -1,10 +1,13 @@
 # asr-meeting-pipeline
 
 ## 1. 한 줄 요약
-회의 음성 파일을 전사, 화자 분리, 요약하여 텍스트 회의록으로 내보내는 서버 실행용 CLI 파이프라인이다.
+회의 음성 파일을 전사, 화자 분리, 요약하여 텍스트 회의록으로 내보내는 서버 실행용 파이프라인이며, 기능별 CLI와 FastAPI 진입점을 함께 제공한다.
 
 ## 2. 현재 구현 범위
-- `run_pipeline.py` 기반 단일 파일 배치 실행
+- `uv` 기반 단일 프로젝트 패키징(`pyproject.toml`)
+- 기능별 실행 진입점: `asr-transcribe`, `asr-diarize`, `asr-summarize`, `asr-pipeline`
+- `run_pipeline.py` 호환 래퍼 유지
+- FastAPI skeleton: `/transcriptions`, `/diarizations`, `/summaries`, `/pipelines`, `/jobs/{job_id}`
 - 단계별 산출물 저장: `work/<job_id>`, `output/<job_id>`, `logs/<job_id>.log`
 - SQLite 기반 job 상태/산출물 기록
 - 실제 동작 단계: preprocess, merge, summarize(vLLM client), export
@@ -13,28 +16,42 @@
 
 ## 3. 빠른 시작
 ```bash
-python3.10 -m venv .venv
-source .venv/bin/activate
-python -m pip install -U pip wheel
-pip install -r requirements.txt
+uv python install 3.10
+uv sync --group dev
 ```
 
-GPU 서버에서는 torch를 먼저 설치한 뒤 adapter 의존성을 추가한다.
+기능별 의존성은 `uv` group으로 선택 설치한다.
+
+```bash
+uv sync --group transcribe --group summarize --group dev
+uv sync --group diarize --group dev
+uv sync --group api --group dev
+
+cp .env.example .env
+```
+
+GPU 서버에서는 CUDA wheel만 별도로 설치한다.
 
 ```bash
 # 예시: CUDA 12.4
-pip install "torch==2.6.0" "torchaudio==2.6.0" --index-url https://download.pytorch.org/whl/cu124
-pip install -r requirements.server.txt
-
-cp .env.example .env
+uv pip install "torch==2.6.0" "torchaudio==2.6.0" --index-url https://download.pytorch.org/whl/cu124
 ```
 
 기본 smoke test는 mock 모드로 실행할 수 있다.
 
 ```bash
-python run_pipeline.py ./input/test1.m4a \
+uv run asr-pipeline ./input/test1.m4a \
   --meeting-title "주간 제품 회의" \
   --pipeline-mode mock
+```
+
+기능별 실행도 가능하다.
+
+```bash
+uv run asr-transcribe ./input/test1.m4a --meeting-title "주간 제품 회의" --pipeline-mode mock
+uv run asr-diarize ./input/test1.m4a --meeting-title "주간 제품 회의" --pipeline-mode mock
+uv run asr-summarize ./output/job/transcript_diarized.json --meeting-title "주간 제품 회의" --pipeline-mode mock
+uv run asr-api --host 0.0.0.0 --port 8080
 ```
 
 production 모드에서는 `.env.example`에 들어있는 기본 adapter 커맨드를 그대로 쓸 수 있다.
@@ -45,13 +62,14 @@ production 모드에서는 `.env.example`에 들어있는 기본 adapter 커맨�
 - `HUGGINGFACE_HUB_TOKEN` 설정(pyannote 접근 시 필요)
 
 ```bash
-env CUDA_VISIBLE_DEVICES=1 python run_pipeline.py ./input/test1.m4a --meeting-title "주간 제품 회의"
-nohup env CUDA_VISIBLE_DEVICES=1 python run_pipeline.py ./input/test1.m4a --meeting-title "주간 제품 회의" > ./logs/nohup_test1.log 2>&1 &
+env CUDA_VISIBLE_DEVICES=1 uv run asr-pipeline ./input/test1.m4a --meeting-title "주간 제품 회의"
+nohup env CUDA_VISIBLE_DEVICES=1 uv run asr-pipeline ./input/test1.m4a --meeting-title "주간 제품 회의" > ./logs/nohup_test1.log 2>&1 &
 ```
 
 ## 4. 요구 환경
 - Linux 서버
 - Python 3.10+
+- `uv`
 - ffmpeg 설치
 - production 모드에서는 GPU용 torch/torchaudio, qwen-asr, pyannote.audio
 - `pyannote/speaker-diarization-community-1`를 쓸 경우 `pyannote.audio 4.x` 필요
@@ -62,7 +80,10 @@ nohup env CUDA_VISIBLE_DEVICES=1 python run_pipeline.py ./input/test1.m4a --meet
 - `work/`: 중간 산출물
 - `output/`: 최종 산출물
 - `logs/`: job 로그
-- `src/`: 파이프라인 코드
+- `src/cli/`: 기능별 CLI 진입점
+- `src/services/`: 기능 서비스 계층
+- `src/api/`: FastAPI 앱
+- `src/`: 파이프라인/adapter/client/schema 코드
 - `tests/`: 단위 테스트
 
 ## 6. 환경 변수
@@ -83,13 +104,13 @@ nohup env CUDA_VISIBLE_DEVICES=1 python run_pipeline.py ./input/test1.m4a --meet
 현재 테스트는 `unittest` 호환으로 작성되어 추가 패키지 없이 실행할 수 있다.
 
 ```bash
-python -m unittest discover -s tests -p 'test_*.py'
+uv run python -m unittest discover -s tests -p 'test_*.py'
 ```
 
 `pytest`를 설치한 경우 다음도 가능하다.
 
 ```bash
-pytest -q
+uv run pytest -q
 ```
 
 ## 8. 문제 해결
@@ -104,6 +125,7 @@ pytest -q
 - `torchaudio.list_audio_backends` 오류: `torch`와 `torchaudio`를 같은 버전의 2.9 미만으로 다시 맞춰 설치. `cu124` 예시는 `2.6.0`
 - `NameError: AudioDecoder`: `pyannote.audio 4.x`가 기대하는 `torchcodec` 디코더 스택이 깨진 상태. 가장 쉬운 우회는 `pyannote/speaker-diarization-3.1` + `pyannote.audio 3.3.2`
 - production stage 실패: `ASR_COMMAND`, `ALIGN_COMMAND`, `DIARIZATION_COMMAND` 설정 확인
+- `env: 'python': No such file or directory`: `uv run ...`으로 실행하거나 `python3`/절대 경로 interpreter를 사용한다.
 
 ## 9. 다음 확장 포인트
 - 긴 회의 transcript chunking 후 summarize
