@@ -27,11 +27,15 @@
 14. 현재 검증된 서버 예시는 `GPU 0 = vLLM(gpt-oss-120b, port 8120)`, `GPU 1 = asr pipeline` 이며, 실제 운영에서는 서버 자원/정책에 따라 GPU 배치가 바뀔 수 있다.
 15. 현재 검증된 `asr` 런타임은 `Python 3.10.12`, `uv 0.9.22`, `torch/torchaudio 2.8.0+cu126`, `pyannote.audio 4.0.4` 이다.
 16. 현재 검증된 `vllm` 런타임은 `Python 3.12.12`, `vllm 0.15.0` 이며 `/v1/chat/completions` route가 응답한다.
+17. VRAM 안정 측정이 필요할 때는 CLI 배치가 아니라 resident API(`asr-transcribe-api`, `asr-diarize-api`)를 사용한다.
+18. 기존 `asr-api` 는 서비스 계층 thin wrapper이며 모델 상주 용도가 아니다.
+19. 실제 운영에서 resident API는 model-serving plane, 기존 `asr-api` 는 orchestration/control plane 으로 보는 구성이 자연스럽다.
 
 ## 4. 현재 상태 요약
 - `pyproject.toml` 추가 및 `uv` 실행 기준 반영
 - 기능별 서비스 계층(`src/services`)과 CLI(`src/cli`) 분리 완료
 - FastAPI skeleton(`src/api`) 추가 완료
+- resident runtime 계층(`src/runtime`) 및 `asr-transcribe-api` / `asr-diarize-api` 추가 완료
 - 기존 stage/orchestrator는 유지하고 상위 계층만 분리
 - `scripts/clean_runtime.sh`로 `work/`, `output/`, `logs/` 런타임 산출물 정리 가능
 - 서버에서 `env CUDA_VISIBLE_DEVICES=1 uv run asr-pipeline ./input/test2.m4a --meeting-title "03171354"` 성공 검증 완료
@@ -39,6 +43,8 @@
 
 ## 5. 다음 작업(Next Actions)
 - 긴 transcript 요약 chunking 전략 추가
+- resident API 기준 idle/peak VRAM, latency 계측 자동화
+- resident API 결과를 orchestrator와 직결할지 결정
 - vLLM readiness 대기/재시도 로직 도입 여부 결정
 - `uv lock` 생성 및 GPU 서버 표준 설치 절차 고정
 - FastAPI 엔드포인트의 비동기 job 처리/인증 정책 결정
@@ -51,6 +57,7 @@
 - 토큰/키와 전사 원문 전체는 로그에 남기지 않는다.
 - `vllm` 서버는 `/root/project/vllm`의 별도 환경에서 먼저 기동돼 있어야 한다.
 - `vllm` 120B는 준비 시간이 길고, `8120` 포트가 실제로 열리기 전에는 summarize가 `Connection refused`로 실패할 수 있다.
+- resident API는 코드 수정 후 자동 반영되지 않으므로 프로세스 재시작이 필요하다.
 
 ## 7. 미결 사항(Open Questions)
 - 긴 회의 요약 시 chunking 및 reduce 전략

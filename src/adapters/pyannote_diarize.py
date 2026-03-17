@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import inspect
 from pathlib import Path
 import sys
 
 from src.adapters.common import env_optional_int, load_runtime_env, project_root_from, write_json
+
+
+@dataclass(slots=True)
+class LoadedDiarizationRuntime:
+    model_name: str
+    pipeline: object
+    default_num_speakers: int | None
+    default_min_speakers: int | None
+    default_max_speakers: int | None
 
 
 def parse_args() -> argparse.Namespace:
@@ -99,24 +109,23 @@ def validate_pyannote_runtime(pyannote_version: str, model_name: str) -> None:
         )
 
 
-def main() -> int:
-    args = parse_args()
-    project_root = project_root_from(Path(__file__))
-    env = load_runtime_env(project_root)
-
+def load_diarization_runtime(
+    env: dict[str, str],
+    *,
+    model_name: str | None = None,
+) -> LoadedDiarizationRuntime:
     try:
         import pyannote.audio
         import torch
         from pyannote.audio import Pipeline
     except ImportError as error:
-        print(f"pyannote dependencies are missing: {error}", file=sys.stderr)
-        return 1
+        raise RuntimeError(f"pyannote dependencies are missing: {error}") from error
 
-    model_name = args.model or env.get("DIARIZATION_MODEL", "pyannote/speaker-diarization-community-1")
-    validate_pyannote_runtime(pyannote.audio.__version__, model_name)
+    resolved_model_name = model_name or env.get("DIARIZATION_MODEL", "pyannote/speaker-diarization-community-1")
+    validate_pyannote_runtime(pyannote.audio.__version__, resolved_model_name)
     token = env.get("HUGGINGFACE_HUB_TOKEN", "").strip() or None
     pipeline = Pipeline.from_pretrained(
-        model_name,
+        resolved_model_name,
         **build_pipeline_load_kwargs(Pipeline.from_pretrained, token),
     )
 
@@ -126,45 +135,80 @@ def main() -> int:
             raise RuntimeError("CUDA device was requested for diarization but is not available.")
         pipeline.to(torch.device(diarization_device))
 
-    inference_kwargs = {}
-    num_speakers = args.num_speakers if args.num_speakers is not None else env_optional_int(env, "DIARIZATION_NUM_SPEAKERS")
-    min_speakers = args.min_speakers if args.min_speakers is not None else env_optional_int(env, "DIARIZATION_MIN_SPEAKERS")
-    max_speakers = args.max_speakers if args.max_speakers is not None else env_optional_int(env, "DIARIZATION_MAX_SPEAKERS")
-    if num_speakers is not None:
-        inference_kwargs["num_speakers"] = num_speakers
-    else:
-        if min_speakers is not None:
-            inference_kwargs["min_speakers"] = min_speakers
-        if max_speakers is not None:
-            inference_kwargs["max_speakers"] = max_speakers
+    return LoadedDiarizationRuntime(
+        model_name=resolved_model_name,
+        pipeline=pipeline,
+        default_num_speakers=env_optional_int(env, "DIARIZATION_NUM_SPEAKERS"),
+        default_min_speakers=env_optional_int(env, "DIARIZATION_MIN_SPEAKERS"),
+        default_max_speakers=env_optional_int(env, "DIARIZATION_MAX_SPEAKERS"),
+    )
 
-    diarization_input = load_audio_for_pyannote(Path(args.audio).resolve())
-    diarization_output = pipeline(diarization_input, **inference_kwargs)
+
+def diarize_with_runtime(
+    runtime: LoadedDiarizationRuntime,
+    *,
+    audio_path: Path,
+    num_speakers: int | None = None,
+    min_speakers: int | None = None,
+    max_speakers: int | None = None,
+) -> tuple[dict, str]:
+    inference_kwargs = {}
+    resolved_num_speakers = runtime.default_num_speakers if num_speakers is None else num_speakers
+    resolved_min_speakers = runtime.default_min_speakers if min_speakers is None else min_speakers
+    resolved_max_speakers = runtime.default_max_speakers if max_speakers is None else max_speakers
+    if resolved_num_speakers is not None:
+        inference_kwargs["num_speakers"] = resolved_num_speakers
+    else:
+        if resolved_min_speakers is not None:
+            inference_kwargs["min_speakers"] = resolved_min_speakers
+        if resolved_max_speakers is not None:
+            inference_kwargs["max_speakers"] = resolved_max_speakers
+
+    diarization_input = load_audio_for_pyannote(audio_path.resolve())
+    diarization_output = runtime.pipeline(diarization_input, **inference_kwargs)
     annotation = (
         getattr(diarization_output, "exclusive_speaker_diarization", None)
         or getattr(diarization_output, "speaker_diarization", None)
         or diarization_output
     )
     turns = annotation_to_turns(annotation)
+    payload = {
+        "provider": "pyannote.audio",
+        "model": runtime.model_name,
+        "speakers": turns,
+    }
+    if hasattr(annotation, "write_rttm"):
+        rttm_lines = build_rttm_lines(turns, diarization_input.get("uri", "meeting"))
+    else:
+        rttm_lines = build_rttm_lines(turns, diarization_input.get("uri", "meeting"))
+    return payload, rttm_lines
+
+
+def main() -> int:
+    args = parse_args()
+    project_root = project_root_from(Path(__file__))
+    env = load_runtime_env(project_root)
+
+    try:
+        runtime = load_diarization_runtime(env, model_name=args.model)
+        payload, rttm_content = diarize_with_runtime(
+            runtime,
+            audio_path=Path(args.audio).resolve(),
+            num_speakers=args.num_speakers,
+            min_speakers=args.min_speakers,
+            max_speakers=args.max_speakers,
+        )
+    except RuntimeError as error:
+        print(str(error), file=sys.stderr)
+        return 1
 
     output_path = Path(args.output).resolve()
-    write_json(
-        output_path,
-        {
-            "provider": "pyannote.audio",
-            "model": model_name,
-            "speakers": turns,
-        },
-    )
+    write_json(output_path, payload)
 
     output_dir = Path(args.output_dir).resolve() if args.output_dir else output_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
     rttm_path = output_dir / "diarization.rttm"
-    if hasattr(annotation, "write_rttm"):
-        with rttm_path.open("w", encoding="utf-8") as file_pointer:
-            annotation.write_rttm(file_pointer)
-    else:
-        rttm_path.write_text(build_rttm_lines(turns), encoding="utf-8")
+    rttm_path.write_text(rttm_content, encoding="utf-8")
     return 0
 
 

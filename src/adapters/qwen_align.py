@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from pathlib import Path
 import sys
 
@@ -14,6 +15,16 @@ from src.adapters.common import (
     read_json,
     write_json,
 )
+
+
+@dataclass(slots=True)
+class LoadedAlignRuntime:
+    model_name: str
+    forced_language: str
+    max_batch_size: int
+    model: object
+    sample_rate: int
+    normalize_audio_input: object
 
 
 def parse_args() -> argparse.Namespace:
@@ -34,64 +45,80 @@ def build_align_payload(*, model_name: str, aligned_segments: list[dict]) -> dic
     }
 
 
-def main() -> int:
-    args = parse_args()
-    project_root = project_root_from(Path(__file__))
-    env = load_runtime_env(project_root)
-
+def load_align_runtime(
+    env: dict[str, str],
+    *,
+    model_name: str | None = None,
+    language: str | None = None,
+) -> LoadedAlignRuntime:
     try:
         import torch
         from qwen_asr import Qwen3ForcedAligner
         from qwen_asr.inference.utils import SAMPLE_RATE, normalize_audio_input
     except ImportError as error:
-        print(f"Qwen align dependencies are missing: {error}", file=sys.stderr)
-        return 1
+        raise RuntimeError(f"Qwen align dependencies are missing: {error}") from error
 
-    model_name = args.model or env.get("ALIGN_MODEL", "Qwen/Qwen3-ForcedAligner-0.6B")
-    forced_language = normalize_language_name(args.language or env.get("ALIGN_LANGUAGE"))
+    resolved_model_name = model_name or env.get("ALIGN_MODEL", "Qwen/Qwen3-ForcedAligner-0.6B")
+    forced_language = normalize_language_name(language or env.get("ALIGN_LANGUAGE"))
     max_batch_size = int(env.get("ALIGN_MAX_BATCH_SIZE", "8"))
 
     load_kwargs = load_kwargs_from_env(torch, env, "ALIGN")
-    aligner = Qwen3ForcedAligner.from_pretrained(model_name, **load_kwargs)
+    aligner = Qwen3ForcedAligner.from_pretrained(resolved_model_name, **load_kwargs)
 
     align_device = env.get("ALIGN_DEVICE", env.get("DEVICE", "")).strip()
     if "device_map" not in load_kwargs:
         move_model_to_device(aligner.model, torch, align_device)
 
-    asr_payload = read_json(Path(args.input_json).resolve())
-    audio_waveform = normalize_audio_input(str(Path(args.audio).resolve()))
+    return LoadedAlignRuntime(
+        model_name=resolved_model_name,
+        forced_language=forced_language,
+        max_batch_size=max_batch_size,
+        model=aligner,
+        sample_rate=SAMPLE_RATE,
+        normalize_audio_input=normalize_audio_input,
+    )
+
+
+def align_with_runtime(
+    runtime: LoadedAlignRuntime,
+    *,
+    audio_path: Path,
+    asr_payload: dict,
+    language: str | None = None,
+) -> dict:
+    forced_language = normalize_language_name(language) or runtime.forced_language
+    audio_waveform = runtime.normalize_audio_input(str(audio_path.resolve()))
     audio_sample_count = len(audio_waveform)
     asr_segments = [segment for segment in asr_payload.get("segments", []) if str(segment.get("text", "")).strip()]
 
     if not asr_segments:
-        write_json(Path(args.output).resolve(), build_align_payload(model_name=model_name, aligned_segments=[]))
-        return 0
+        return build_align_payload(model_name=runtime.model_name, aligned_segments=[])
 
     tasks = []
     for segment in asr_segments:
         start_sec = float(segment.get("start_sec", 0.0))
         end_sec = float(segment.get("end_sec", start_sec))
-        start_index = max(0, min(audio_sample_count, int(round(start_sec * SAMPLE_RATE))))
-        end_index = max(start_index + 1, min(audio_sample_count, int(round(end_sec * SAMPLE_RATE))))
+        start_index = max(0, min(audio_sample_count, int(round(start_sec * runtime.sample_rate))))
+        end_index = max(start_index + 1, min(audio_sample_count, int(round(end_sec * runtime.sample_rate))))
         chunk_waveform = audio_waveform[start_index:end_index]
-        language = normalize_language_name(segment.get("language") or forced_language or asr_payload.get("language"))
-        if not language:
+        segment_language = normalize_language_name(segment.get("language") or forced_language or asr_payload.get("language"))
+        if not segment_language:
             raise ValueError(
                 "Alignment requires a single language. Set ALIGN_LANGUAGE or ASR_FORCE_LANGUAGE in .env."
             )
         tasks.append(
             {
-                "audio": (chunk_waveform, SAMPLE_RATE),
+                "audio": (chunk_waveform, runtime.sample_rate),
                 "text": str(segment["text"]).strip(),
-                "language": language,
+                "language": segment_language,
                 "offset_sec": start_sec,
                 "fallback_end_sec": end_sec,
             }
         )
 
     aligned_segments: list[dict] = []
-    for batch in chunked(tasks, max_batch_size):
-        batch_results = aligner.align(
+    for batch in chunked(tasks, runtime.max_batch_size):
+        batch_results = runtime.model.align(
             audio=[item["audio"] for item in batch],
             text=[item["text"] for item in batch],
             language=[item["language"] for item in batch],
@@ -116,7 +143,26 @@ def main() -> int:
                 }
             )
 
-    payload = build_align_payload(model_name=model_name, aligned_segments=aligned_segments)
+    return build_align_payload(model_name=runtime.model_name, aligned_segments=aligned_segments)
+
+
+def main() -> int:
+    args = parse_args()
+    project_root = project_root_from(Path(__file__))
+    env = load_runtime_env(project_root)
+
+    try:
+        runtime = load_align_runtime(env, model_name=args.model, language=args.language)
+        asr_payload = read_json(Path(args.input_json).resolve())
+        payload = align_with_runtime(
+            runtime,
+            audio_path=Path(args.audio).resolve(),
+            asr_payload=asr_payload,
+            language=args.language,
+        )
+    except RuntimeError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     write_json(Path(args.output).resolve(), payload)
     return 0
 

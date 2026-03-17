@@ -32,3 +32,35 @@ class JobStatusResponse(BaseModel):
     job: dict
     artifacts: list[dict]
 
+
+class RuntimeHealthResponse(BaseModel):
+    status: str
+    loaded_at: str
+    process_id: int
+    device: str
+    models: dict[str, str]
+
+
+class TranscriptionRuntimeRequest(BaseModel):
+    audio_path: str
+    language: str | None = Field(default=None)
+    context: str | None = Field(default=None)
+
+
+class TranscriptionRuntimeResponse(BaseModel):
+    asr: dict
+    align: dict
+    elapsed_sec: float
+
+
+class DiarizationRuntimeRequest(BaseModel):
+    audio_path: str
+    num_speakers: int | None = Field(default=None)
+    min_speakers: int | None = Field(default=None)
+    max_speakers: int | None = Field(default=None)
+
+
+class DiarizationRuntimeResponse(BaseModel):
+    diarization: dict
+    rttm: str
+    elapsed_sec: float

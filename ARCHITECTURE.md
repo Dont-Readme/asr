@@ -42,12 +42,16 @@ Validated runtime topology (current server example; GPU assignment may change by
   -> GPU 1: asr pipeline
      -> preprocess (CPU/ffmpeg)
      -> asr / align / diarize
+  -> resident mode
+     -> asr-transcribe-api: Qwen3-ASR + ForcedAligner 상주
+     -> asr-diarize-api: pyannote pipeline 상주
 ```
 
 ## 3. 컴포넌트 책임
 - Bootstrap: 설정 로드, job context 생성, 공통 진입점 초기화
 - CLI: 기능별 입력 인자 파싱과 서비스 호출
 - API: FastAPI endpoint와 HTTP 입출력
+- Runtime: resident API에서 모델을 startup 시 한 번만 로딩하고 재사용
 - Services: 기능 경계 단위 orchestration
 - Scripts: 반복 운영 작업(cleanup 등) 자동화
 - Orchestrator: stage 순서, 상태전이, 실패 처리
@@ -74,6 +78,8 @@ Validated runtime topology (current server example; GPU assignment may change by
 - 요약은 `vllm_generate`, `vllm_openai_chat`, `mock` provider를 지원한다.
 - 기능별 CLI와 FastAPI는 동일한 서비스 계층을 재사용한다.
 - 현재 검증된 운영 경로는 `vllm_generate + /v1/chat/completions + gpt-oss-120b` 조합이다.
+- VRAM 안정 측정은 thin API가 아니라 resident API로 수행한다.
+- resident API는 model-serving plane, 기존 `src/api/app.py` 기반 API는 orchestration/control plane 으로 유지하는 방향이 자연스럽다.
 
 ## 6. 에러 처리
 - stage 내부 오류는 `StageError`로 래핑한다.
@@ -81,6 +87,7 @@ Validated runtime topology (current server example; GPU assignment may change by
 - 기능별 서비스도 최소한의 `RUNNING/DONE/FAILED` 상태전이를 SQLite에 남긴다.
 - 민감정보와 전사 전체 원문은 로그에 남기지 않는다.
 - summarize는 외부 `vllm` 서버 준비 전에는 `Connection refused`가 날 수 있으므로 운영 절차에서 readiness 확인이 필요하다.
+- resident API는 startup 단계에서 모델 로딩이 실패하면 프로세스 자체가 올라오지 않는다.
 
 ## 7. 테스트 전략
 - `test_preprocess.py`: ffmpeg command 조합 검증
