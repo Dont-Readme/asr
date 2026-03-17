@@ -16,6 +16,10 @@ def load_runtime_env(project_root: Path) -> dict[str, str]:
     env_values = load_env_file(project_root / ".env")
     merged = {**env_values, **os.environ}
 
+    cuda_visible_devices = merged.get("CUDA_VISIBLE_DEVICES", "").strip()
+    if cuda_visible_devices:
+        os.environ.setdefault("CUDA_VISIBLE_DEVICES", cuda_visible_devices)
+
     hf_home = merged.get("HF_HOME", "").strip()
     if hf_home:
         hf_home_path = Path(hf_home)
