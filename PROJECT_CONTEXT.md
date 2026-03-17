@@ -17,7 +17,7 @@
 4. ASR/align/diarize는 provider seam을 두고 `PIPELINE_MODE=mock`에서 smoke test 가능한 mock 출력을 제공한다.
 5. production 모드에서는 `src/adapters/qwen_asr.py`, `src/adapters/qwen_align.py`, `src/adapters/pyannote_diarize.py`를 외부 커맨드로 연결한다.
 6. 화자 라벨은 diarization 결과의 첫 등장 순서를 기준으로 `화자 A/B/C`에 매핑한다.
-7. 프로젝트 패키징은 `uv + pyproject.toml`을 우선 사용하고, `requirements*.txt`는 legacy 참고용으로만 유지한다.
+7. 프로젝트 패키징은 `uv + pyproject.toml`을 단일 기준으로 사용한다.
 8. 테스트는 현재 환경 제약을 반영해 `unittest` 호환으로 작성한다.
 9. ASR adapter는 align 단계 호환성을 위해 기본 chunk 길이를 180초로 제한한다.
 10. CUDA 12.4 서버에서 `community-1 + pyannote.audio 4.x`가 런타임 의존성(torchcodec/torchaudio)로 불안정하면 `speaker-diarization-3.1 + pyannote.audio 3.3.2`를 fallback으로 사용한다.
