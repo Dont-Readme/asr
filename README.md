@@ -54,6 +54,12 @@ uv run asr-summarize ./output/job/transcript_diarized.json --meeting-title "주�
 uv run asr-api --host 0.0.0.0 --port 8080
 ```
 
+런타임 산출물만 정리하고 `.gitkeep`은 남기려면 다음 스크립트를 사용한다.
+
+```bash
+bash scripts/clean_runtime.sh
+```
+
 production 모드에서는 `.env.example`에 들어있는 기본 adapter 커맨드를 그대로 쓸 수 있다.
 필수 조건:
 - `ffmpeg` 설치

@@ -40,6 +40,7 @@ uv / CLI / FastAPI
 - CLI: 기능별 입력 인자 파싱과 서비스 호출
 - API: FastAPI endpoint와 HTTP 입출력
 - Services: 기능 경계 단위 orchestration
+- Scripts: 반복 운영 작업(cleanup 등) 자동화
 - Orchestrator: stage 순서, 상태전이, 실패 처리
 - Stages: 파일 I/O 계약 유지
 - Adapters: 실제 모델 추론 코드(Qwen3-ASR / Qwen3-ForcedAligner / pyannote)

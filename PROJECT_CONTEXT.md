@@ -30,6 +30,7 @@
 - 기능별 서비스 계층(`src/services`)과 CLI(`src/cli`) 분리 완료
 - FastAPI skeleton(`src/api`) 추가 완료
 - 기존 stage/orchestrator는 유지하고 상위 계층만 분리
+- `scripts/clean_runtime.sh`로 `work/`, `output/`, `logs/` 런타임 산출물 정리 가능
 
 ## 5. 다음 작업(Next Actions)
 - 긴 transcript 요약 chunking 전략 추가
