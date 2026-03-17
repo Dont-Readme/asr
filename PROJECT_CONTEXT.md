@@ -7,7 +7,7 @@
 - 입력 오디오를 ffmpeg로 16kHz mono wav로 변환
 - 단계별 산출물과 로그를 로컬 폴더에 저장
 - overlap 정책으로 화자 포함 전사본 생성
-- vLLM `/generate` 기반 요약 결과 생성
+- vLLM 기반 요약 결과 생성
 - SQLite로 job 상태/오류/산출물 기록
 
 ## 3. 현재 결정된 사항(Decision Log)
@@ -24,6 +24,9 @@
 11. 기능 경계는 `전사(전처리+ASR+Align)`, `화자 분리`, `요약`, `파이프라인/API`의 4개로 나눈다.
 12. 기존 `run_pipeline.py`는 호환 래퍼로 유지하고, 실제 진입점은 `src/cli/*`와 `src/api/*`로 옮긴다.
 13. FastAPI는 모델 로직을 직접 품지 않고 서비스 계층을 재사용하는 thin API layer로 시작한다.
+14. 현재 검증된 서버 예시는 `GPU 0 = vLLM(gpt-oss-120b, port 8120)`, `GPU 1 = asr pipeline` 이며, 실제 운영에서는 서버 자원/정책에 따라 GPU 배치가 바뀔 수 있다.
+15. 현재 검증된 `asr` 런타임은 `Python 3.10.12`, `uv 0.9.22`, `torch/torchaudio 2.8.0+cu126`, `pyannote.audio 4.0.4` 이다.
+16. 현재 검증된 `vllm` 런타임은 `Python 3.12.12`, `vllm 0.15.0` 이며 `/v1/chat/completions` route가 응답한다.
 
 ## 4. 현재 상태 요약
 - `pyproject.toml` 추가 및 `uv` 실행 기준 반영
@@ -31,10 +34,12 @@
 - FastAPI skeleton(`src/api`) 추가 완료
 - 기존 stage/orchestrator는 유지하고 상위 계층만 분리
 - `scripts/clean_runtime.sh`로 `work/`, `output/`, `logs/` 런타임 산출물 정리 가능
+- 서버에서 `env CUDA_VISIBLE_DEVICES=1 uv run asr-pipeline ./input/test2.m4a --meeting-title "03171354"` 성공 검증 완료
+- 최신 성공 산출물 예시: `output/03171354-c7bb5a06/{transcript_diarized.json,summary.json,meeting_notes.txt}`
 
 ## 5. 다음 작업(Next Actions)
 - 긴 transcript 요약 chunking 전략 추가
-- vLLM 요약 연동 정리: `/generate` provider와 OpenAI 호환 `/v1/chat/completions` provider 설정 및 20B/120B 실행 스크립트 정합성 점검
+- vLLM readiness 대기/재시도 로직 도입 여부 결정
 - `uv lock` 생성 및 GPU 서버 표준 설치 절차 고정
 - FastAPI 엔드포인트의 비동기 job 처리/인증 정책 결정
 - Postgres 전환 및 migration 도입
@@ -44,6 +49,8 @@
 - ffmpeg 설치가 필요하다.
 - production 모드는 실제 모델 실행기 또는 외부 커맨드 설정이 필요하다.
 - 토큰/키와 전사 원문 전체는 로그에 남기지 않는다.
+- `vllm` 서버는 `/root/project/vllm`의 별도 환경에서 먼저 기동돼 있어야 한다.
+- `vllm` 120B는 준비 시간이 길고, `8120` 포트가 실제로 열리기 전에는 summarize가 `Connection refused`로 실패할 수 있다.
 
 ## 7. 미결 사항(Open Questions)
 - 긴 회의 요약 시 chunking 및 reduce 전략

@@ -8,6 +8,7 @@
 - 기능별 실행 진입점: `asr-transcribe`, `asr-diarize`, `asr-summarize`, `asr-pipeline`
 - `run_pipeline.py` 호환 래퍼 유지
 - FastAPI skeleton: `/transcriptions`, `/diarizations`, `/summaries`, `/pipelines`, `/jobs/{job_id}`
+- 현재 검증된 운영 경로는 CLI 배치 실행이다
 - 단계별 산출물 저장: `work/<job_id>`, `output/<job_id>`, `logs/<job_id>.log`
 - SQLite 기반 job 상태/산출물 기록
 - 실제 동작 단계: preprocess, merge, summarize(vLLM client), export
@@ -15,34 +16,68 @@
 - `mock` 모드도 유지되어 smoke test 가능
 
 ## 3. 빠른 시작
-```bash
-uv python install 3.10
-uv sync --group dev
-```
+현재 검증된 서버 기준 실행 절차는 다음과 같다.
 
-기능별 의존성은 `uv` group으로 선택 설치한다.
+1. `asr` 프로젝트 의존성 설치
 
 ```bash
-uv sync --group transcribe --group summarize --group dev
-uv sync --group diarize --group dev
-uv sync --group api --group dev
-
+cd /root/project/asr
+uv sync --python 3.10 --group transcribe --group diarize --group summarize --group dev
+uv pip install "torch==2.8.0" "torchaudio==2.8.0" --index-url https://download.pytorch.org/whl/cu126
 cp .env.example .env
 ```
 
-GPU 서버에서는 CUDA wheel만 별도로 설치한다.
+2. 시스템 패키지 준비
 
 ```bash
-# 예시: CUDA 12.4
-uv pip install "torch==2.6.0" "torchaudio==2.6.0" --index-url https://download.pytorch.org/whl/cu124
+apt-get update
+apt-get install -y ffmpeg
+ffmpeg -version
 ```
 
-기본 smoke test는 mock 모드로 실행할 수 있다.
+3. `vLLM` 서버 준비
 
 ```bash
-uv run asr-pipeline ./input/test1.m4a \
-  --meeting-title "주간 제품 회의" \
-  --pipeline-mode mock
+cd /root/project/vllm
+source .venv/bin/activate
+python -V
+python - <<'PY'
+import vllm
+print(vllm.__version__)
+PY
+bash run_120.sh
+```
+
+4. `vLLM` 준비 완료 대기
+
+```bash
+ss -ltnp | grep 8120
+tail -n 80 logs/$(ls -t logs | head -n 1)
+```
+
+성공 기준:
+- `Starting vLLM API server 0 on http://0.0.0.0:8120`
+- `Application startup complete`
+- `ss -ltnp | grep 8120` 에서 포트가 보인다
+
+5. 전체 파이프라인 실행
+
+```bash
+cd /root/project/asr
+env CUDA_VISIBLE_DEVICES=1 uv run asr-pipeline ./input/test2.m4a --meeting-title "03171354"
+```
+
+6. 요약만 다시 실행
+
+```bash
+cd /root/project/asr
+uv run asr-summarize ./output/<job_id>/transcript_diarized.json --meeting-title "03171354"
+```
+
+7. 런타임 산출물 정리
+
+```bash
+bash scripts/clean_runtime.sh
 ```
 
 기능별 실행도 가능하다.
@@ -54,32 +89,29 @@ uv run asr-summarize ./output/job/transcript_diarized.json --meeting-title "주�
 uv run asr-api --host 0.0.0.0 --port 8080
 ```
 
-런타임 산출물만 정리하고 `.gitkeep`은 남기려면 다음 스크립트를 사용한다.
+기본 smoke test는 mock 모드로 실행할 수 있다.
 
 ```bash
-bash scripts/clean_runtime.sh
+uv run asr-pipeline ./input/test1.m4a \
+  --meeting-title "주간 제품 회의" \
+  --pipeline-mode mock
 ```
 
-production 모드에서는 `.env.example`에 들어있는 기본 adapter 커맨드를 그대로 쓸 수 있다.
-필수 조건:
-- `ffmpeg` 설치
-- GPU용 `torch`, `torchaudio` 설치
-- `qwen-asr`, `pyannote.audio` 설치
-- `HUGGINGFACE_HUB_TOKEN` 설정(pyannote 접근 시 필요)
-
-```bash
-env CUDA_VISIBLE_DEVICES=1 uv run asr-pipeline ./input/test1.m4a --meeting-title "주간 제품 회의"
-nohup env CUDA_VISIBLE_DEVICES=1 uv run asr-pipeline ./input/test1.m4a --meeting-title "주간 제품 회의" > ./logs/nohup_test1.log 2>&1 &
-```
+실제 운영에서는 아래 순서를 권장한다.
+- 먼저 `/root/project/vllm` 에서 120B 요약 서버를 띄운다
+- `ss -ltnp | grep 8120` 로 요약 서버 준비 완료를 확인한다
+- 그다음 `/root/project/asr` 에서 `env CUDA_VISIBLE_DEVICES=1 uv run asr-pipeline ...` 을 실행한다
+- 요약만 다시 만들 때는 `uv run asr-summarize ...` 만 재실행한다
 
 ## 4. 요구 환경
 - Linux 서버
-- Python 3.10+
+- `asr` 프로젝트: Python `3.10.12`, `uv 0.9.22`
+- `vllm` 프로젝트: Python `3.12.12`, `vllm 0.15.0`
 - `uv`
 - ffmpeg 설치
-- production 모드에서는 GPU용 torch/torchaudio, qwen-asr, pyannote.audio
-- `pyannote/speaker-diarization-community-1`를 쓸 경우 `pyannote.audio 4.x` 필요
-- CUDA 12.4 + 공식 wheel 제약이 있으면 `pyannote/speaker-diarization-3.1` + `pyannote.audio 3.3.2`가 더 안정적일 수 있음
+- production 모드에서는 GPU용 `torch 2.8.0+cu126`, `torchaudio 2.8.0+cu126`, `qwen-asr`, `pyannote.audio 4.0.4`
+- `pyannote/speaker-diarization-community-1`를 사용한다
+- GPU 배치는 현재 검증 예시에서 `GPU 0 = vLLM`, `GPU 1 = asr pipeline` 이며, 실제 운영에서는 서버 자원/정책에 따라 바뀔 수 있다
 
 ## 5. 폴더 구조
 - `input/`: 입력 오디오
@@ -106,6 +138,27 @@ nohup env CUDA_VISIBLE_DEVICES=1 uv run asr-pipeline ./input/test1.m4a --meeting
 - `SUMMARY_BASE_URL`, `SUMMARY_ENDPOINT_PATH`
 - OpenAI 호환 vLLM이면 `SUMMARY_PROVIDER=vllm_openai_chat`, `SUMMARY_MODEL`, `SUMMARY_API_KEY`
 
+현재 검증된 요약 설정은 아래와 같다.
+
+```env
+SUMMARY_PROVIDER=vllm_generate
+SUMMARY_BASE_URL=http://127.0.0.1:8120
+SUMMARY_ENDPOINT_PATH=/v1/chat/completions
+SUMMARY_MODEL=gpt-oss-120b
+```
+
+설명:
+- 현재 코드는 `SUMMARY_PROVIDER=vllm_generate` 이더라도 `SUMMARY_ENDPOINT_PATH=/v1/chat/completions` 이면 OpenAI chat payload로 자동 전환한다
+- 따라서 지금 검증된 서버에서는 위 값을 그대로 쓰는 것이 가장 안전하다
+
+현재 검증된 외부 커맨드 설정은 아래와 같다.
+
+```env
+ASR_COMMAND=.venv/bin/python -m src.adapters.qwen_asr --audio "{audio_path}" --output "{output_path}"
+ALIGN_COMMAND=.venv/bin/python -m src.adapters.qwen_align --audio "{audio_path}" --input-json "{input_json}" --output "{output_path}"
+DIARIZATION_COMMAND=.venv/bin/python -m src.adapters.pyannote_diarize --audio "{audio_path}" --output "{output_path}" --output-dir "{output_dir}"
+```
+
 ## 7. 테스트
 현재 테스트는 `unittest` 호환으로 작성되어 추가 패키지 없이 실행할 수 있다.
 
@@ -119,20 +172,75 @@ uv run python -m unittest discover -s tests -p 'test_*.py'
 uv run pytest -q
 ```
 
-## 8. 문제 해결
+## 8. 운영 체크포인트
+문제가 났을 때는 아래 순서로 확인하면 된다.
+
+1. `asr` 런타임이 정상인지 확인
+
+```bash
+cd /root/project/asr
+uv run python -V
+uv run python -c "import torch, torchaudio; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.device_count(), torchaudio.__version__)"
+```
+
+2. 핵심 `.env` 값이 맞는지 확인
+
+```bash
+cd /root/project/asr
+grep -E '^(ASR_COMMAND|ALIGN_COMMAND|DIARIZATION_COMMAND|ASR_DEVICE|ALIGN_DEVICE|DIARIZATION_DEVICE|SUMMARY_PROVIDER|SUMMARY_BASE_URL|SUMMARY_ENDPOINT_PATH|SUMMARY_MODEL)=' .env
+```
+
+3. `vllm` 서버가 실제로 살아 있는지 확인
+
+```bash
+cd /root/project/vllm
+ss -ltnp | grep 8120
+ps -ef | grep 'vllm serve' | grep -v grep
+tail -n 80 logs/$(ls -t logs | head -n 1)
+```
+
+4. GPU 배치가 맞는지 확인
+
+```bash
+nvidia-smi
+```
+
+현재 검증 예시:
+- GPU 0: `gpt-oss-120b` vLLM 서버
+- GPU 1: `asr-pipeline` 의 `ASR/ALIGN/DIARIZE`
+
+주의:
+- 위 GPU 배치는 현재 서버에서 검증한 예시일 뿐 고정 규칙이 아니다
+- 실제 운영에서는 가용 VRAM, 다른 워크로드, 서버 정책에 따라 GPU 번호를 조정할 수 있다
+
+5. 최신 산출물이 생성됐는지 확인
+
+```bash
+cd /root/project/asr
+latest_job="$(ls -td output/* 2>/dev/null | head -n 1)"
+echo "$latest_job"
+find "$latest_job" -maxdepth 1 -type f | sort
+```
+
+## 9. 문제 해결
 - ffmpeg 실패: `ffmpeg -version` 확인
 - SQLite 생성 실패: `DB_URL` 경로와 쓰기 권한 확인
-- vLLM 호출 실패: `SUMMARY_BASE_URL`와 `SUMMARY_ENDPOINT_PATH` 확인
-- `vLLM HTTP 400`에 `Field required: messages`가 나오면 OpenAI 호환 vLLM endpoint에 `vllm_generate` payload를 보낸 상태다. `SUMMARY_PROVIDER=vllm_openai_chat`로 바꾸고 `SUMMARY_MODEL`을 함께 설정한다.
+- `uv sync`가 깨진 `.venv` 경고를 내면: `rm -rf .venv` 후 `uv sync --python 3.10 ...` 로 다시 만든다
+- `Qwen ASR dependencies are missing: No module named 'qwen_asr'`: `uv sync --group transcribe ...`가 빠진 상태다
+- `torch.cuda.is_available() is False`: `nvidia-smi`와 `uv run python -c "import torch; ..."`를 확인하고 GPU torch를 다시 설치한다
+- `vLLM 연결 실패: [Errno 111] Connection refused`: `vllm` 서버가 아직 준비 안 되었거나 죽은 상태다. `ss -ltnp | grep 8120` 와 `tail -f /root/project/vllm/logs/...` 로 확인한다
+- `vLLM HTTP 400`에 `Field required: messages`가 나오면 OpenAI 호환 endpoint에 `/generate` payload를 보낸 상태다. 현재 client는 `/v1/chat/completions`에서 chat payload로 자동 전환한다
+- `vllm: not found` 또는 `bad interpreter`: `/root/project/vllm` 쪽 가상환경/PATH 문제다. `source .venv/bin/activate`, `which vllm`, `.venv/bin/vllm --help` 로 점검한다
+- `ASR/ALIGN/DIARIZE` 인자 누락(`--audio`, `--input-json`) 오류: `.env`의 `ASR_COMMAND`, `ALIGN_COMMAND`, `DIARIZATION_COMMAND` 줄에 공백이 깨진 상태다
 - Qwen 모델 로드 실패: `torch` CUDA wheel, `ASR_DEVICE`, `ALIGN_DEVICE` 확인
 - pyannote 로드 실패: `HUGGINGFACE_HUB_TOKEN`과 모델 약관 동의 확인
-- `SpeakerDiarization.__init__(... plda ...)` 오류: `pyannote.audio`를 4.x로 업그레이드
-- `huggingface-hub==1.x` 충돌: `uv pip install "huggingface-hub>=0.34,<1.0" "transformers==4.57.6"`
-- `torchaudio.list_audio_backends` 오류: `torch`와 `torchaudio`를 같은 버전의 2.9 미만으로 다시 맞춰 설치. `cu124` 예시는 `2.6.0`
-- `NameError: AudioDecoder`: `pyannote.audio 4.x`가 기대하는 `torchcodec` 디코더 스택이 깨진 상태. 가장 쉬운 우회는 `pyannote/speaker-diarization-3.1` + `pyannote.audio 3.3.2`
+- `SpeakerDiarization.__init__(... plda ...)` 오류: `pyannote.audio` 버전이 맞지 않는 상태다. 현재 검증값은 `4.0.4`
+- `huggingface-hub==1.x` 충돌: `huggingface-hub>=0.34,<1.0` 범위를 맞춘다
+- `torchcodec` 경고: 현재 diarization adapter는 waveform을 먼저 메모리로 읽어서 넘기므로 경고만으로 실패로 보지 않는다
+- `NameError: AudioDecoder`: `pyannote.audio 4.x`가 기대하는 `torchcodec` 디코더 스택이 깨진 상태다. 현재 adapter는 이 경로를 우회하도록 작성돼 있다
 - production stage 실패: `ASR_COMMAND`, `ALIGN_COMMAND`, `DIARIZATION_COMMAND` 설정 확인
 - `env: 'python': No such file or directory`: `uv run ...`으로 실행하거나 `python3`/절대 경로 interpreter를 사용한다.
 
-## 9. 다음 확장 포인트
+## 10. 다음 확장 포인트
 - 긴 회의 transcript chunking 후 summarize
 - Postgres + migration 도입

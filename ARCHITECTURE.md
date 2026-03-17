@@ -33,6 +33,15 @@ uv / CLI / FastAPI
      -> summarize
      -> export
   -> SQLite repo 갱신
+
+Validated runtime topology (current server example; GPU assignment may change by environment)
+  -> GPU 0: /root/project/vllm/run_120.sh
+     -> vllm 0.15.0
+     -> gpt-oss-120b
+     -> port 8120
+  -> GPU 1: asr pipeline
+     -> preprocess (CPU/ffmpeg)
+     -> asr / align / diarize
 ```
 
 ## 3. 컴포넌트 책임
@@ -64,17 +73,19 @@ uv / CLI / FastAPI
 - ASR adapter는 align 단계 호환성을 위해 기본 chunk 길이를 180초로 제한한다.
 - 요약은 `vllm_generate`, `vllm_openai_chat`, `mock` provider를 지원한다.
 - 기능별 CLI와 FastAPI는 동일한 서비스 계층을 재사용한다.
+- 현재 검증된 운영 경로는 `vllm_generate + /v1/chat/completions + gpt-oss-120b` 조합이다.
 
 ## 6. 에러 처리
 - stage 내부 오류는 `StageError`로 래핑한다.
 - orchestrator는 실패 stage와 메시지를 SQLite와 로그에 기록한다.
 - 기능별 서비스도 최소한의 `RUNNING/DONE/FAILED` 상태전이를 SQLite에 남긴다.
 - 민감정보와 전사 전체 원문은 로그에 남기지 않는다.
+- summarize는 외부 `vllm` 서버 준비 전에는 `Connection refused`가 날 수 있으므로 운영 절차에서 readiness 확인이 필요하다.
 
 ## 7. 테스트 전략
 - `test_preprocess.py`: ffmpeg command 조합 검증
 - `test_merge_policy.py`: overlap 기반 speaker 매핑 검증
-- `test_vllm_client.py`: `/generate` 응답 파싱 검증
+- `test_vllm_client.py`: `/generate` 및 OpenAI chat 응답 파싱 검증
 - `test_feature_services.py`: 기능별 서비스(mock) 실행 검증
 
 ## 8. 향후 교체 지점
