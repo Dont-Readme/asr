@@ -10,9 +10,11 @@
 - `uv run asr-api`
   - orchestration/control-plane API다.
   - `meeting note job`을 만들고, 기능 API들을 호출해 최종 회의록 산출물을 만든다.
+  - job은 여러 개 접수할 수 있지만 내부 worker는 기본적으로 하나씩 순차 처리한다.
 - `uv run asr-transcribe-api`
   - 전사 model-serving API다.
   - `voice input`용 `ASR-only`와 `meeting note`용 `ASR+align` 엔드포인트를 함께 제공한다.
+  - 두 엔드포인트는 같은 resident ASR runtime을 공유하고, `voice`가 `meeting`보다 높은 우선순위로 실행된다.
 - `uv run asr-diarize-api`
   - 화자 분리 model-serving API다.
 - `uv run asr-summarize-api`
@@ -124,6 +126,8 @@ env CUDA_VISIBLE_DEVICES=1 uv run asr-pipeline ./input/test2.m4a --meeting-title
 - `voice-transcriptions`는 `ASR-only`다.
 - `meeting-transcriptions`는 `ASR + align`을 반환한다.
 - 업로드와 서버 경로 입력을 둘 다 지원하지만, 내부에서는 하나의 파일 경로 흐름으로 정규화한다.
+- transcribe API는 공용 실행 슬롯 1개를 쓰며, `voice` 요청이 먼저 실행된다.
+- `align`은 `meeting-transcriptions` 요청 시에만 로드되고 요청이 끝나면 unload된다.
 
 호출 예시:
 
@@ -170,19 +174,25 @@ curl -s http://127.0.0.1:8093/summaries \
 설명:
 - 비동기 job 방식이다.
 - orchestration API는 `meeting-transcriptions -> diarizations -> merge -> summaries -> txt export` 순서로 실행한다.
+- job은 여러 개 접수할 수 있지만 내부 queue worker가 기본적으로 하나씩 처리한다.
 - 상태/오류/산출물은 SQLite와 `logs/`, `output/`에 남긴다.
 
 ## 6. 운영 관점의 권장 구조
 - `transcribe-api`
   - 웹의 음성 입력과 회의록 작성이 둘 다 호출할 수 있는 전사 서비스다.
   - 음성 입력은 `voice-transcriptions`, 회의록은 `meeting-transcriptions`를 쓴다.
+  - 같은 resident ASR runtime을 공유하고, `voice`가 `meeting`보다 높은 우선순위를 가진다.
+  - `meeting`에서만 align을 잠깐 로드하고 요청이 끝나면 unload한다.
 - `diarize-api`
   - 회의록 작성 플로우에서만 사용한다.
+  - 기본 동시성은 `1`이다.
 - `summarize-api`
   - diarized transcript를 받아 요약만 수행한다.
+  - 기본 동시성은 `1`이다.
 - `asr-api`
   - 회의록 작성 버튼에서 호출하는 오케스트레이션 API다.
   - front-end는 job 생성과 상태 조회만 신경 쓰면 된다.
+  - 실제 회의록 job은 queue worker가 기본 `1개`씩 처리한다.
 
 ## 7. 요구 환경
 - Linux 서버
@@ -217,6 +227,9 @@ curl -s http://127.0.0.1:8093/summaries \
 - `ASR_DEVICE`, `ALIGN_DEVICE`, `DIARIZATION_DEVICE`
 - `SUMMARY_PROVIDER`, `SUMMARY_BASE_URL`, `SUMMARY_ENDPOINT_PATH`, `SUMMARY_MODEL`
 - `TRANSCRIBE_API_BASE_URL`, `DIARIZE_API_BASE_URL`, `SUMMARIZE_API_BASE_URL`
+- `MEETING_JOB_WORKERS`, `TRANSCRIBE_MAX_CONCURRENCY`
+- `VOICE_MAX_PENDING`, `VOICE_WAIT_TIMEOUT_SEC`
+- `MEETING_TRANSCRIBE_MAX_PENDING`, `DIARIZE_MAX_CONCURRENCY`, `SUMMARIZE_MAX_CONCURRENCY`
 
 현재 검증된 요약 설정은 아래와 같다.
 

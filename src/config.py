@@ -85,6 +85,13 @@ class AppConfig:
     transcribe_api_base_url: str = "http://127.0.0.1:8091"
     diarize_api_base_url: str = "http://127.0.0.1:8092"
     summarize_api_base_url: str = "http://127.0.0.1:8093"
+    meeting_job_workers: int = 1
+    transcribe_max_concurrency: int = 1
+    voice_max_pending: int = 3
+    voice_wait_timeout_sec: float = 15.0
+    meeting_transcribe_max_pending: int = 10
+    diarize_max_concurrency: int = 1
+    summarize_max_concurrency: int = 1
 
     def with_overrides(
         self,
@@ -145,6 +152,13 @@ def load_config(project_root: Path, env_path: Path | None = None) -> AppConfig:
         transcribe_api_base_url=_get_setting(raw_values, "TRANSCRIBE_API_BASE_URL", "http://127.0.0.1:8091"),
         diarize_api_base_url=_get_setting(raw_values, "DIARIZE_API_BASE_URL", "http://127.0.0.1:8092"),
         summarize_api_base_url=_get_setting(raw_values, "SUMMARIZE_API_BASE_URL", "http://127.0.0.1:8093"),
+        meeting_job_workers=int(_get_setting(raw_values, "MEETING_JOB_WORKERS", "1")),
+        transcribe_max_concurrency=int(_get_setting(raw_values, "TRANSCRIBE_MAX_CONCURRENCY", "1")),
+        voice_max_pending=int(_get_setting(raw_values, "VOICE_MAX_PENDING", "3")),
+        voice_wait_timeout_sec=float(_get_setting(raw_values, "VOICE_WAIT_TIMEOUT_SEC", "15")),
+        meeting_transcribe_max_pending=int(_get_setting(raw_values, "MEETING_TRANSCRIBE_MAX_PENDING", "10")),
+        diarize_max_concurrency=int(_get_setting(raw_values, "DIARIZE_MAX_CONCURRENCY", "1")),
+        summarize_max_concurrency=int(_get_setting(raw_values, "SUMMARIZE_MAX_CONCURRENCY", "1")),
         audio_target_sr=int(_get_setting(raw_values, "AUDIO_TARGET_SR", "16000")),
         audio_target_channels=int(_get_setting(raw_values, "AUDIO_TARGET_CHANNELS", "1")),
         merge_ambiguous_sec=float(_get_setting(raw_values, "MERGE_AMBIGUOUS_SEC", "0.08")),

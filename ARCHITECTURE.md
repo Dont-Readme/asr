@@ -38,7 +38,7 @@ uv / CLI / FastAPI
      -> /summaries
 
   -> src/services/meeting_note_jobs.py
-     -> orchestration background worker
+     -> orchestration queue worker
      -> feature API HTTP 호출
      -> local merge/export
 
@@ -71,16 +71,22 @@ GPU 1
 - Orchestration API
   - 회의록 작성 job 생성
   - job 상태 조회
+  - 내부 queue worker를 통한 job 순차 실행
   - feature API 순차 호출
   - merge/export 수행
 - Transcribe API
   - `voice input`용 `ASR-only`
   - `meeting note`용 `ASR+align`
+  - `voice`와 `meeting`은 같은 resident ASR runtime을 공유
+  - 공용 실행 슬롯 1개를 공유하며 `voice`가 더 높은 우선순위를 가진다
+  - align runtime은 `meeting` 요청 중에만 로드되고 요청 완료 후 unload된다
 - Diarize API
   - 화자 분리 수행
+  - resident runtime은 유지하되 실행 동시성은 기본 `1`이다
 - Summarize API
   - diarized transcript payload를 요약 payload로 변환
   - 외부 `vLLM` 서버 호출
+  - API 레벨 동시성은 기본 `1`이다
 - Runtime
   - resident API에서 모델을 startup 시 한 번만 올리고 재사용
 - Services
@@ -97,19 +103,22 @@ GPU 1
 ### A. 음성 입력
 1. 웹서비스가 `transcribe API /voice-transcriptions/*` 호출
 2. API가 오디오를 canonical path로 정규화
-3. resident ASR runtime이 전사 수행
-4. 텍스트와 ASR payload 반환
+3. transcribe queue가 빈 슬롯을 기다리며 `voice` 우선순위로 작업을 예약
+4. resident ASR runtime이 전사 수행
+5. 텍스트와 ASR payload 반환
 
 ### B. 회의록 작성
 1. 웹서비스가 `orchestration API /meeting-note-jobs/*` 호출
-2. orchestration API가 job row와 작업 디렉토리를 생성
-3. background worker가 `meeting-transcriptions` API 호출
-4. background worker가 `diarizations` API 호출
-5. orchestration 내부에서 `merge.run` 수행
-6. background worker가 `summaries` API 호출
-7. orchestration 내부에서 `export.run` 수행
-8. `output/<job_id>/transcript_diarized.json`, `summary.json`, `meeting_notes.txt` 생성
-9. SQLite에 상태/세그먼트/산출물 기록
+2. orchestration API가 job row와 작업 디렉토리를 생성하고 즉시 `job_id`를 반환
+3. 내부 queue worker가 `PENDING` job을 하나씩 꺼내 `RUNNING`으로 전환
+4. worker가 `meeting-transcriptions` API 호출
+5. transcribe queue는 `voice`보다 낮은 우선순위로 meeting 전사를 실행한다
+6. worker가 `diarizations` API 호출
+7. orchestration 내부에서 `merge.run` 수행
+8. worker가 `summaries` API 호출
+9. orchestration 내부에서 `export.run` 수행
+10. `output/<job_id>/transcript_diarized.json`, `summary.json`, `meeting_notes.txt` 생성
+11. SQLite에 상태/세그먼트/산출물 기록
 
 ## 5. Bootstrap 결정
 - 기존 stage/adapters/model logic는 유지한다.
@@ -117,6 +126,10 @@ GPU 1
 - feature API public contract는 `upload`와 `path`를 둘 다 연다.
 - summarize API public contract는 `transcript payload`를 기본으로 한다.
 - resident transcription runtime은 `voice`에서는 align을 생략하고, `meeting`에서만 align을 수행한다.
+- resident transcription runtime은 `meeting` 요청 완료 후 align runtime을 unload해 idle VRAM을 줄인다.
+- transcribe API는 별도 `voice` API 프로세스를 추가로 띄우지 않고, 같은 resident runtime에 우선순위 큐를 둔다.
+- orchestration API는 여러 job을 접수하더라도 기본 worker 수는 `1`이며 실제 회의록 실행은 순차 처리한다.
+- diarize API와 summarize API는 기본 동시성을 각각 `1`로 제한한다.
 - resident runtime도 기존 preprocess 동작을 맞추기 위해 ffmpeg 기반 오디오 정규화를 거친다.
 - `asr-api`는 orchestration/control plane, feature API는 model-serving plane으로 둔다.
 

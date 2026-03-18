@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import gc
 from pathlib import Path
 import os
 import time
@@ -102,4 +103,24 @@ class ResidentTranscriptionRuntime:
                 elapsed_sec=round(time.perf_counter() - started_at, 3),
             )
         finally:
+            self.unload_align_runtime()
             cleanup_temp_wave(prepared_path)
+
+    def unload_align_runtime(self) -> None:
+        runtime = self._align_runtime
+        if runtime is None:
+            return
+        try:
+            model = getattr(runtime, "model", None)
+            if model is not None:
+                del model
+        finally:
+            self._align_runtime = None
+            gc.collect()
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:  # pragma: no cover - defensive cleanup
+                return

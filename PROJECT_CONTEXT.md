@@ -21,11 +21,16 @@
 8. summarize API public contract는 `diarized transcript JSON payload`를 기본으로 사용한다.
 9. orchestration API는 비동기 job 방식으로 `job_id`를 즉시 반환하고, 상태 조회는 polling으로 처리한다.
 10. orchestration API는 feature API를 HTTP로 순차 호출하고, `merge`와 `export`는 내부에서 수행한다.
-11. 화자 라벨은 diarization 결과의 첫 등장 순서를 기준으로 `화자 A/B/C`에 매핑한다.
-12. `vllm`은 별도 서버(`/root/project/vllm`)에서 먼저 기동돼 있어야 한다.
-13. 현재 검증된 서버 예시는 `GPU 0 = vLLM(gpt-oss-120b, port 8120)`, `GPU 1 = asr feature API/CLI` 이며, 실제 운영에서는 GPU 배치가 바뀔 수 있다.
-14. 현재 검증된 `asr` 런타임은 `Python 3.10.12`, `uv 0.9.22`, `torch/torchaudio 2.8.0+cu126`, `pyannote.audio 4.0.4` 이다.
-15. 현재 검증된 `vllm` 런타임은 `Python 3.12.12`, `vllm 0.15.0` 이며 `/v1/chat/completions` route가 응답한다.
+11. orchestration API는 여러 job을 접수할 수 있지만, 내부 worker 기본값은 `1`이며 실제 job 실행은 queue 기반 순차 처리로 제한한다.
+12. transcribe API는 `voice`와 `meeting` 경로를 같은 resident ASR runtime 위에 유지하고, 공용 실행 슬롯 1개를 공유한다.
+13. transcribe API에서는 `voice` 요청이 `meeting` 요청보다 높은 우선순위를 가진다.
+14. align runtime은 `meeting` 요청 중에만 로드하고, 요청 완료 후 unload해 idle VRAM을 줄인다.
+15. diarize API와 summarize API 기본 동시성은 각각 `1`이다.
+16. 화자 라벨은 diarization 결과의 첫 등장 순서를 기준으로 `화자 A/B/C`에 매핑한다.
+17. `vllm`은 별도 서버(`/root/project/vllm`)에서 먼저 기동돼 있어야 한다.
+18. 현재 검증된 서버 예시는 `GPU 0 = vLLM(gpt-oss-120b, port 8120)`, `GPU 1 = asr feature API/CLI` 이며, 실제 운영에서는 GPU 배치가 바뀔 수 있다.
+19. 현재 검증된 `asr` 런타임은 `Python 3.10.12`, `uv 0.9.22`, `torch/torchaudio 2.8.0+cu126`, `pyannote.audio 4.0.4` 이다.
+20. 현재 검증된 `vllm` 런타임은 `Python 3.12.12`, `vllm 0.15.0` 이며 `/v1/chat/completions` route가 응답한다.
 
 ## 4. 현재 상태 요약
 - 기능별 CLI(`src/cli`) 분리 완료
@@ -33,8 +38,11 @@
 - feature API 3종(`transcribe`, `diarize`, `summarize`) 정리 완료
 - resident runtime 계층(`src/runtime`) 유지
 - 전사 resident API는 `voice`와 `meeting` 경로를 분리 완료
+- 전사 resident API는 공용 실행 슬롯 1개 + `voice` 우선순위 큐를 사용
+- align runtime은 `meeting` 요청 처리 후 unload
 - summarize API는 `transcript payload -> summary payload` contract 추가 완료
 - orchestration API는 feature API HTTP 호출 + local merge/export 구조로 변경 완료
+- orchestration API는 queue worker 기본값 `1`로 job을 순차 실행
 - `scripts/clean_runtime.sh`로 `work/`, `output/`, `logs/` 정리 가능
 
 ## 5. 다음 작업(Next Actions)
@@ -56,4 +64,4 @@
 ## 7. 미결 사항(Open Questions)
 - 긴 회의 요약 시 chunking 및 reduce 전략
 - Postgres 전환 시 migration 도구 선택
-- orchestration API를 현재 스레드 기반 비동기에서 큐 기반으로 확장할지 여부
+- transcribe queue에서 `voice` 요청의 대기열/timeout 기본값을 운영에서 얼마로 둘지

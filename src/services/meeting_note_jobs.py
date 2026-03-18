@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
-import threading
 
 from src.bootstrap import JobRequest, create_job_context, default_project_root, load_app_config
 from src.clients.feature_api_client import FeatureApiClient
@@ -11,6 +10,7 @@ from src.db.models import JobStage, JobStatus
 from src.pipeline.job_context import JobContext
 from src.schemas.summary import MeetingSummary
 from src.services.persistence import persist_summary_result, persist_transcript_records
+from src.services.task_runner import TaskRunner
 from src.stages import export, merge
 from src.utils.errors import StageError
 from src.utils.paths import compute_sha256
@@ -27,6 +27,10 @@ class MeetingNoteJobService:
         self.project_root = (project_root or default_project_root()).resolve()
         self.config = load_app_config(project_root=self.project_root)
         self.feature_client = feature_client or FeatureApiClient(self.config)
+        self.job_runner = TaskRunner(
+            name="meeting-note-jobs",
+            workers=self.config.meeting_job_workers,
+        )
 
     def submit_path_job(
         self,
@@ -57,13 +61,9 @@ class MeetingNoteJobService:
         return SubmittedMeetingNoteJob(job_id=context.job_id, meeting_title=context.meeting_title)
 
     def _start_background_job(self, context: JobContext) -> None:
-        worker = threading.Thread(
-            target=self._run_job,
-            args=(context,),
-            daemon=True,
-            name=f"meeting-note-{context.job_id}",
+        self.job_runner.enqueue(
+            lambda: self._run_job(context),
         )
-        worker.start()
 
     def _run_job(self, context: JobContext) -> None:
         context.repo.update_job_status(context.job_id, status=JobStatus.RUNNING)

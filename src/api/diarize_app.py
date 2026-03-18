@@ -7,13 +7,23 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from src.api.models import DiarizationPathRequest, DiarizationRuntimeResponse, RuntimeHealthResponse
 from src.api.upload_io import delete_file_quietly, save_upload_to_temp
 from src.runtime.diarization_runtime import ResidentDiarizationRuntime
+from src.services.task_runner import TaskRunner
 from src.utils.errors import PipelineError
 
 
-def create_app(runtime: ResidentDiarizationRuntime | None = None) -> FastAPI:
+def create_app(
+    runtime: ResidentDiarizationRuntime | None = None,
+    task_runner: TaskRunner | None = None,
+) -> FastAPI:
     resolved_runtime = runtime or ResidentDiarizationRuntime()
+    runtime_config = getattr(resolved_runtime, "config", None)
+    resolved_runner = task_runner or TaskRunner(
+        name="diarize",
+        workers=getattr(runtime_config, "diarize_max_concurrency", 1),
+    )
     app = FastAPI(title="ASR Diarization Runtime API", version="0.2.0")
     app.state.runtime = resolved_runtime
+    app.state.task_runner = resolved_runner
 
     @app.get("/health", response_model=RuntimeHealthResponse)
     def health() -> RuntimeHealthResponse:
@@ -22,11 +32,13 @@ def create_app(runtime: ResidentDiarizationRuntime | None = None) -> FastAPI:
     @app.post("/diarizations/by-path", response_model=DiarizationRuntimeResponse)
     def diarize_by_path(request: DiarizationPathRequest) -> DiarizationRuntimeResponse:
         try:
-            result = resolved_runtime.diarize(
-                audio_path=Path(request.audio_path).expanduser().resolve(),
-                num_speakers=request.num_speakers,
-                min_speakers=request.min_speakers,
-                max_speakers=request.max_speakers,
+            result = resolved_runner.submit(
+                lambda: resolved_runtime.diarize(
+                    audio_path=Path(request.audio_path).expanduser().resolve(),
+                    num_speakers=request.num_speakers,
+                    min_speakers=request.min_speakers,
+                    max_speakers=request.max_speakers,
+                ),
             )
         except (PipelineError, RuntimeError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
@@ -45,11 +57,13 @@ def create_app(runtime: ResidentDiarizationRuntime | None = None) -> FastAPI:
     ) -> DiarizationRuntimeResponse:
         stored_path = save_upload_to_temp(resolved_runtime.project_root, file, prefix="diarize")
         try:
-            result = resolved_runtime.diarize(
-                audio_path=stored_path,
-                num_speakers=num_speakers,
-                min_speakers=min_speakers,
-                max_speakers=max_speakers,
+            result = resolved_runner.submit(
+                lambda: resolved_runtime.diarize(
+                    audio_path=stored_path,
+                    num_speakers=num_speakers,
+                    min_speakers=min_speakers,
+                    max_speakers=max_speakers,
+                ),
             )
         except (PipelineError, RuntimeError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
