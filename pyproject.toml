@@ -25,6 +25,7 @@ asr-summarize = "src.cli.summarize:main"
 asr-api = "src.api.server:main"
 asr-transcribe-api = "src.api.transcribe_server:main"
 asr-diarize-api = "src.api.diarize_server:main"
+asr-summarize-api = "src.api.summarize_server:main"
 
 [dependency-groups]
 transcribe = [
@@ -38,6 +39,7 @@ diarize = [
 summarize = []
 api = [
   "fastapi>=0.115,<1.0",
+  "python-multipart>=0.0.9,<1.0",
   "uvicorn>=0.30,<1.0",
 ]
 dev = [

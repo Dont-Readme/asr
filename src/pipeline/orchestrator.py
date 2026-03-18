@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import json
-
-from src.db.models import JobStage, JobStatus, TranscriptSegmentRecord
+from src.db.models import JobStage, JobStatus
 from src.pipeline.job_context import JobContext
-from src.schemas.transcript import TranscriptResult
-from src.schemas.summary import MeetingSummary
+from src.services.persistence import persist_summary_result, persist_transcript_records
 from src.stages import align, asr, diarize, export, merge, preprocess, summarize
 from src.utils.errors import StageError
 
@@ -20,10 +17,10 @@ def run_pipeline(context: JobContext) -> dict[str, str]:
         _run_stage(context, JobStage.DIARIZE, diarize.run)
 
         transcript_result = _run_stage(context, JobStage.MERGE, merge.run)
-        _persist_transcript(context, transcript_result)
+        persist_transcript_records(context, transcript_result)
 
         summary_result = _run_stage(context, JobStage.SUMMARIZE, summarize.run)
-        _persist_summary(context, summary_result)
+        persist_summary_result(context, summary_result)
 
         notes_path = _run_stage(context, JobStage.EXPORT, export.run)
         context.repo.update_job_status(
@@ -69,24 +66,3 @@ def _run_stage(context: JobContext, stage: JobStage, runner):
     result = runner(context)
     context.logger.info("%s completed.", stage.value)
     return result
-
-
-def _persist_transcript(context: JobContext, transcript: TranscriptResult) -> None:
-    records = [
-        TranscriptSegmentRecord(
-            speaker_label=segment.speaker_label,
-            start_ms=int(segment.start_sec * 1000),
-            end_ms=int(segment.end_sec * 1000),
-            text=segment.text,
-            words_json=json.dumps(
-                [word.to_dict() for word in segment.words],
-                ensure_ascii=False,
-            ),
-        )
-        for segment in transcript.segments
-    ]
-    context.repo.replace_transcript_segments(context.job_id, records)
-
-
-def _persist_summary(context: JobContext, summary: MeetingSummary) -> None:
-    context.repo.upsert_summary(context.job_id, summary.to_dict())

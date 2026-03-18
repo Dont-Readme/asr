@@ -2,88 +2,78 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
-from src.api.models import AudioFeatureRequest, JobCreatedResponse, JobStatusResponse, SummaryFeatureRequest
-from src.bootstrap import JobRequest, create_job_context, default_project_root, load_app_config
+from src.api.models import JobAcceptedResponse, JobStatusResponse, MeetingNotePathRequest
+from src.api.upload_io import save_upload_to_input_root
+from src.bootstrap import default_project_root, load_app_config
 from src.db.repo import SqliteJobRepository
-from src.services.diarization import run_diarization
-from src.services.pipeline import run_pipeline_job
-from src.services.summarization import run_summary
-from src.services.transcription import run_transcription
-from src.utils.errors import PipelineError
+from src.services.meeting_note_jobs import MeetingNoteJobService
 
 
-def create_app() -> FastAPI:
-    app = FastAPI(title="ASR Meeting Pipeline API", version="0.1.0")
+def create_app(job_service: MeetingNoteJobService | None = None) -> FastAPI:
+    project_root = default_project_root()
+    config = load_app_config(project_root=project_root)
+    resolved_job_service = job_service or MeetingNoteJobService(project_root=project_root)
 
-    @app.post("/transcriptions", response_model=JobCreatedResponse)
-    def create_transcription(request: AudioFeatureRequest) -> JobCreatedResponse:
-        context = create_job_context(_audio_job_request(request))
-        try:
-            result = run_transcription(context)
-        except PipelineError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
-        return JobCreatedResponse(
-            job_id=context.job_id,
-            meeting_title=context.meeting_title,
-            artifacts={
-                "audio_path": str(result.preprocessed_audio_path),
-                "asr_json_path": str(result.asr_json_path),
-                "align_json_path": str(result.align_json_path),
-            },
+    app = FastAPI(title="ASR Meeting Orchestration API", version="0.2.0")
+    app.state.job_service = resolved_job_service
+
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ready"}
+
+    @app.post("/meeting-note-jobs/by-path", response_model=JobAcceptedResponse)
+    def create_meeting_note_job_by_path(request: MeetingNotePathRequest) -> JobAcceptedResponse:
+        submitted = resolved_job_service.submit_path_job(
+            audio_path=Path(request.audio_path).expanduser().resolve(),
+            meeting_title=request.meeting_title,
+            language=request.language,
+            output_root=Path(request.output_root).resolve() if request.output_root else None,
+            work_root=Path(request.work_root).resolve() if request.work_root else None,
+            log_root=Path(request.log_root).resolve() if request.log_root else None,
+            pipeline_mode=request.pipeline_mode,
+            overwrite=request.overwrite,
+        )
+        return JobAcceptedResponse(
+            job_id=submitted.job_id,
+            meeting_title=submitted.meeting_title,
+            status="PENDING",
+            status_url=f"/meeting-note-jobs/{submitted.job_id}",
         )
 
-    @app.post("/diarizations", response_model=JobCreatedResponse)
-    def create_diarization(request: AudioFeatureRequest) -> JobCreatedResponse:
-        context = create_job_context(_audio_job_request(request))
-        try:
-            result = run_diarization(context)
-        except PipelineError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
-        return JobCreatedResponse(
-            job_id=context.job_id,
-            meeting_title=context.meeting_title,
-            artifacts={
-                "audio_path": str(result.preprocessed_audio_path),
-                "diarization_json_path": str(result.diarization_json_path),
-                "diarization_rttm_path": str(result.diarization_rttm_path),
-            },
+    @app.post("/meeting-note-jobs/upload", response_model=JobAcceptedResponse)
+    def create_meeting_note_job_upload(
+        file: UploadFile = File(...),
+        meeting_title: str | None = Form(default=None),
+        language: str = Form(default="ko"),
+        output_root: str | None = Form(default=None),
+        work_root: str | None = Form(default=None),
+        log_root: str | None = Form(default=None),
+        pipeline_mode: str | None = Form(default=None),
+        overwrite: bool = Form(default=False),
+    ) -> JobAcceptedResponse:
+        stored_path = save_upload_to_input_root(config.input_root, file, prefix="meeting-note")
+        submitted = resolved_job_service.submit_path_job(
+            audio_path=stored_path,
+            meeting_title=meeting_title,
+            language=language,
+            output_root=Path(output_root).resolve() if output_root else None,
+            work_root=Path(work_root).resolve() if work_root else None,
+            log_root=Path(log_root).resolve() if log_root else None,
+            pipeline_mode=pipeline_mode,
+            overwrite=overwrite,
+        )
+        return JobAcceptedResponse(
+            job_id=submitted.job_id,
+            meeting_title=submitted.meeting_title,
+            status="PENDING",
+            status_url=f"/meeting-note-jobs/{submitted.job_id}",
         )
 
-    @app.post("/summaries", response_model=JobCreatedResponse)
-    def create_summary(request: SummaryFeatureRequest) -> JobCreatedResponse:
-        context = create_job_context(_summary_job_request(request))
-        try:
-            result = run_summary(context, transcript_path=Path(request.transcript_path))
-        except PipelineError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
-        return JobCreatedResponse(
-            job_id=context.job_id,
-            meeting_title=context.meeting_title,
-            artifacts={
-                "transcript_json_path": str(result.transcript_json_path),
-                "summary_json_path": str(result.summary_json_path),
-            },
-        )
-
-    @app.post("/pipelines", response_model=JobCreatedResponse)
-    def create_pipeline(request: AudioFeatureRequest) -> JobCreatedResponse:
-        context = create_job_context(_audio_job_request(request))
-        try:
-            result = run_pipeline_job(context)
-        except PipelineError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
-        return JobCreatedResponse(
-            job_id=context.job_id,
-            meeting_title=context.meeting_title,
-            artifacts=result,
-        )
-
+    @app.get("/meeting-note-jobs/{job_id}", response_model=JobStatusResponse)
     @app.get("/jobs/{job_id}", response_model=JobStatusResponse)
     def get_job(job_id: str) -> JobStatusResponse:
-        project_root = default_project_root()
-        config = load_app_config(project_root=project_root)
         repo = SqliteJobRepository(config.db_url, project_root)
         job = repo.get_job(job_id)
         if not job:
@@ -91,29 +81,3 @@ def create_app() -> FastAPI:
         return JobStatusResponse(job=job, artifacts=repo.list_artifacts(job_id))
 
     return app
-
-
-def _audio_job_request(request: AudioFeatureRequest) -> JobRequest:
-    return JobRequest(
-        source_path=Path(request.audio_path),
-        meeting_title=request.meeting_title,
-        language=request.language,
-        output_root=Path(request.output_root).resolve() if request.output_root else None,
-        work_root=Path(request.work_root).resolve() if request.work_root else None,
-        log_root=Path(request.log_root).resolve() if request.log_root else None,
-        pipeline_mode=request.pipeline_mode,
-        overwrite=request.overwrite,
-    )
-
-
-def _summary_job_request(request: SummaryFeatureRequest) -> JobRequest:
-    return JobRequest(
-        source_path=Path(request.transcript_path),
-        meeting_title=request.meeting_title,
-        language=request.language,
-        output_root=Path(request.output_root).resolve() if request.output_root else None,
-        work_root=Path(request.work_root).resolve() if request.work_root else None,
-        log_root=Path(request.log_root).resolve() if request.log_root else None,
-        pipeline_mode=request.pipeline_mode,
-        overwrite=request.overwrite,
-    )

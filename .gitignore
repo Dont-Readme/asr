@@ -19,6 +19,7 @@ venv/
 
 # Model / package caches
 .hf_cache/
+.api_uploads/
 
 # Generated runtime data
 logs/*

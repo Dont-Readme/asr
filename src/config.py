@@ -82,6 +82,9 @@ class AppConfig:
     merge_ambiguous_sec: float
     merge_ambiguous_ratio: float
     backchannel_mode: str
+    transcribe_api_base_url: str = "http://127.0.0.1:8091"
+    diarize_api_base_url: str = "http://127.0.0.1:8092"
+    summarize_api_base_url: str = "http://127.0.0.1:8093"
 
     def with_overrides(
         self,
@@ -139,6 +142,9 @@ def load_config(project_root: Path, env_path: Path | None = None) -> AppConfig:
         summary_max_tokens=int(_get_setting(raw_values, "SUMMARY_MAX_TOKENS", "1000")),
         summary_response_key=_get_setting(raw_values, "SUMMARY_RESPONSE_KEY", "generated_text"),
         summary_model=_get_setting(raw_values, "SUMMARY_MODEL", ""),
+        transcribe_api_base_url=_get_setting(raw_values, "TRANSCRIBE_API_BASE_URL", "http://127.0.0.1:8091"),
+        diarize_api_base_url=_get_setting(raw_values, "DIARIZE_API_BASE_URL", "http://127.0.0.1:8092"),
+        summarize_api_base_url=_get_setting(raw_values, "SUMMARIZE_API_BASE_URL", "http://127.0.0.1:8093"),
         audio_target_sr=int(_get_setting(raw_values, "AUDIO_TARGET_SR", "16000")),
         audio_target_channels=int(_get_setting(raw_values, "AUDIO_TARGET_CHANNELS", "1")),
         merge_ambiguous_sec=float(_get_setting(raw_values, "MERGE_AMBIGUOUS_SEC", "0.08")),

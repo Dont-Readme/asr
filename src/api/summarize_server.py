@@ -4,9 +4,9 @@ import argparse
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run orchestration API for ASR meeting pipeline")
+    parser = argparse.ArgumentParser(description="Run summary API")
     parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--port", type=int, default=8093)
     parser.add_argument("--reload", action="store_true")
     return parser.parse_args()
 
@@ -18,7 +18,7 @@ def main() -> int:
         raise SystemExit(f"FastAPI server dependencies are missing: {error}") from error
 
     args = parse_args()
-    uvicorn.run("src.api.app:create_app", host=args.host, port=args.port, reload=args.reload, factory=True)
+    uvicorn.run("src.api.summarize_app:create_app", host=args.host, port=args.port, reload=args.reload, factory=True)
     return 0
 
 

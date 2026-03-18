@@ -13,19 +13,11 @@ class BaseJobRequestModel(BaseModel):
     overwrite: bool = Field(default=False)
 
 
-class AudioFeatureRequest(BaseJobRequestModel):
-    audio_path: str
-
-
-class SummaryFeatureRequest(BaseJobRequestModel):
-    transcript_path: str
-    meeting_title: str
-
-
-class JobCreatedResponse(BaseModel):
+class JobAcceptedResponse(BaseModel):
     job_id: str
     meeting_title: str
-    artifacts: dict[str, str]
+    status: str
+    status_url: str
 
 
 class JobStatusResponse(BaseModel):
@@ -41,19 +33,30 @@ class RuntimeHealthResponse(BaseModel):
     models: dict[str, str]
 
 
-class TranscriptionRuntimeRequest(BaseModel):
+class VoiceTranscriptionPathRequest(BaseModel):
     audio_path: str
     language: str | None = Field(default=None)
     context: str | None = Field(default=None)
 
 
-class TranscriptionRuntimeResponse(BaseModel):
+class MeetingTranscriptionPathRequest(VoiceTranscriptionPathRequest):
+    pass
+
+
+class VoiceTranscriptionResponse(BaseModel):
+    text: str
+    asr: dict
+    elapsed_sec: float
+
+
+class MeetingTranscriptionResponse(BaseModel):
+    text: str
     asr: dict
     align: dict
     elapsed_sec: float
 
 
-class DiarizationRuntimeRequest(BaseModel):
+class DiarizationPathRequest(BaseModel):
     audio_path: str
     num_speakers: int | None = Field(default=None)
     min_speakers: int | None = Field(default=None)
@@ -64,3 +67,17 @@ class DiarizationRuntimeResponse(BaseModel):
     diarization: dict
     rttm: str
     elapsed_sec: float
+
+
+class SummaryPayloadRequest(BaseModel):
+    meeting_title: str
+    transcript: dict
+
+
+class SummaryPayloadResponse(BaseModel):
+    summary: dict
+    elapsed_sec: float
+
+
+class MeetingNotePathRequest(BaseJobRequestModel):
+    audio_path: str
