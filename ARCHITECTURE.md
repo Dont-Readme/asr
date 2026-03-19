@@ -65,6 +65,8 @@ GPU 1
   -> CLI batch(asr-pipeline)
 ```
 
+Orchestration API default port is `8080`. If that port is already occupied on the server, run it on another free port such as `8090`.
+
 ## 3. 컴포넌트 책임
 - CLI
   - 운영자 배치 실행과 디버깅

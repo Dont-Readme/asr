@@ -5,6 +5,7 @@
 
 - orchestration API
   - 기본 포트: `8080`
+  - 실제 서버에서 `8080`이 이미 점유된 경우 `8090` 같은 빈 포트를 사용한다
   - 역할: 회의록 작성 job 생성, 상태 조회
 - transcribe API
   - 기본 포트: `8091`
@@ -17,7 +18,7 @@
   - 역할: diarized transcript payload 요약
 
 ## 2. Orchestration API
-Base URL 예시: `http://127.0.0.1:8080`
+Base URL 예시: `http://127.0.0.1:8090`
 
 ### `GET /health`
 응답:

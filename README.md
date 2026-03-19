@@ -23,6 +23,8 @@
 - `run_pipeline.py`
   - 기존 배치 실행 호환 래퍼다.
 
+상세 HTTP 계약은 [API_SPEC.md](/home/kdm_theimc/coding/asr/API_SPEC.md) 를 참고한다.
+
 ## 3. 현재 구현 범위
 - `uv` 기반 단일 프로젝트 패키징(`pyproject.toml`)
 - 배치 CLI: `asr-transcribe`, `asr-diarize`, `asr-summarize`, `asr-pipeline`
@@ -82,22 +84,26 @@ tail -n 80 logs/$(ls -t logs | head -n 1)
 
 ```bash
 cd /root/project/asr
-bash scripts/run_transcribe_api.sh
-bash scripts/run_diarize_api.sh
+# 예시: transcribe는 GPU 1, diarize는 GPU 0
+CUDA_DEVICE=1 bash scripts/run_transcribe_api.sh
+CUDA_DEVICE=0 bash scripts/run_diarize_api.sh
 bash scripts/run_summarize_api.sh
 ```
 
 6. orchestration API 기동
 
+기본 포트는 `8080`이다. 다만 실제 서버에서는 `8080`이 다른 프로세스에 의해 점유될 수 있으므로, 아래 예시는 `8090`을 사용한다.
+
 ```bash
 cd /root/project/asr
-uv run asr-api --host 0.0.0.0 --port 8080
+ORCH_PORT=8090
+uv run asr-api --host 0.0.0.0 --port "$ORCH_PORT"
 ```
 
 7. 회의록 job 생성
 
 ```bash
-curl -s http://127.0.0.1:8080/meeting-note-jobs/by-path \
+curl -s http://127.0.0.1:${ORCH_PORT:-8090}/meeting-note-jobs/by-path \
   -H 'Content-Type: application/json' \
   -d '{"audio_path":"./input/test2.m4a","meeting_title":"03171354"}'
 ```
@@ -105,7 +111,7 @@ curl -s http://127.0.0.1:8080/meeting-note-jobs/by-path \
 8. job 상태 조회
 
 ```bash
-curl -s http://127.0.0.1:8080/meeting-note-jobs/<job_id>
+curl -s http://127.0.0.1:${ORCH_PORT:-8090}/meeting-note-jobs/<job_id>
 ```
 
 배치 CLI는 여전히 유지된다.
@@ -283,7 +289,7 @@ curl -s http://127.0.0.1:8093/health
 3. orchestration API 준비 상태 확인
 
 ```bash
-curl -s http://127.0.0.1:8080/health
+curl -s http://127.0.0.1:${ORCH_PORT:-8090}/health
 ```
 
 4. `vllm` 서버 확인

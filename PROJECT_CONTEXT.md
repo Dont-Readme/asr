@@ -31,6 +31,7 @@
 18. 현재 검증된 서버 예시는 `GPU 0 = vLLM(gpt-oss-120b, port 8120)`, `GPU 1 = asr feature API/CLI` 이며, 실제 운영에서는 GPU 배치가 바뀔 수 있다.
 19. 현재 검증된 `asr` 런타임은 `Python 3.10.12`, `uv 0.9.22`, `torch/torchaudio 2.8.0+cu126`, `pyannote.audio 4.0.4` 이다.
 20. 현재 검증된 `vllm` 런타임은 `Python 3.12.12`, `vllm 0.15.0` 이며 `/v1/chat/completions` route가 응답한다.
+21. orchestration API 기본 포트는 `8080`이지만, 실제 서버에서 포트 충돌이 있으면 `8090` 같은 빈 포트로 띄우는 것을 허용한다.
 
 ## 4. 현재 상태 요약
 - 기능별 CLI(`src/cli`) 분리 완료
@@ -44,6 +45,7 @@
 - orchestration API는 feature API HTTP 호출 + local merge/export 구조로 변경 완료
 - orchestration API는 queue worker 기본값 `1`로 job을 순차 실행
 - `scripts/clean_runtime.sh`로 `work/`, `output/`, `logs/` 정리 가능
+- 현재 audit 기준으로 즉시 삭제 가능한 고신뢰 레거시 파일은 없고, CLI/엔트리포인트/테스트 호환 경로를 유지한다
 
 ## 5. 다음 작업(Next Actions)
 - 긴 transcript 요약 chunking 전략 추가
