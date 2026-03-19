@@ -55,6 +55,7 @@
 - `uv lock` 생성 및 GPU 서버 표준 설치 절차 고정
 - Postgres 전환 및 migration 도입
 - 샘플 음성 파일 3개로 품질 튜닝
+- 현재 오픈모델 조합의 품질 한계와 상용 대안/모델 교체 필요성 평가
 
 ## 6. 중요한 제약/주의사항
 - ffmpeg 설치가 필요하다.
@@ -67,3 +68,4 @@
 - 긴 회의 요약 시 chunking 및 reduce 전략
 - Postgres 전환 시 migration 도구 선택
 - transcribe queue에서 `voice` 요청의 대기열/timeout 기본값을 운영에서 얼마로 둘지
+- 현재 오픈모델 조합을 유지할지, 파인튜닝/모델 교체/상용 서비스 중 어느 방향으로 갈지
